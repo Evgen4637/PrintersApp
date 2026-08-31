@@ -363,11 +363,7 @@ export default function NotesScreen() {
         </TouchableOpacity>
       </View>
 
-      {notes.length === 0 ? (
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyText}>{t('notes.emptyState')}</Text>
-        </View>
-      ) : (
+      {notes.length === 0 ? null : (
         <ScrollView contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + 20 }]}>
           {notes.map((note) => (
             <TouchableOpacity 

@@ -99,9 +99,31 @@ export const setWorkspaceId = (id: string | null) => {
   }
 };
 
+/**
+ * Ожидает установки workspaceId до 10 секунд с интервалом 100 мс.
+ * Если workspaceId не установлен за это время — выбрасывает ошибку.
+ */
+const assertWorkspaceReady = (): Promise<void> => {
+  if (currentWorkspaceId) return Promise.resolve();
+  return new Promise<void>((resolve, reject) => {
+    const started = Date.now();
+    const check = () => {
+      if (currentWorkspaceId) {
+        console.log(`[storage.ts:assertWorkspaceReady] workspaceId ready: "${currentWorkspaceId}"`);
+        resolve();
+      } else if (Date.now() - started > 10000) {
+        reject(new Error('[storage.ts] Workspace ID is still null after 10s. Cannot perform Firestore operations.'));
+      } else {
+        setTimeout(check, 100);
+      }
+    };
+    check();
+  });
+};
+
 const getWorkspaceCollectionRef = (collectionKey: string) => {
   if (!currentWorkspaceId) {
-    throw new Error('Workspace ID is not set.');
+    throw new Error(`[storage.ts] Workspace ID is not set. Cannot access collection "${collectionKey}".`);
   }
   return collection(db, 'workspaces', currentWorkspaceId, collectionKey);
 };
@@ -289,6 +311,7 @@ class StorageService {
     key: string,
     item: T
   ): Promise<T & { id: string; createdAt: string; updatedAt: string }> {
+    await assertWorkspaceReady();
     const id = (item as any).id || generateId();
     const newItem = sanitizeData({
       ...item,
@@ -317,6 +340,7 @@ class StorageService {
     id: string,
     updates: Partial<T>
   ): Promise<T | null> {
+    await assertWorkspaceReady();
     const docRef = doc(getWorkspaceCollectionRef(key), id);
     const updateData = sanitizeData({
       ...updates,
@@ -340,6 +364,7 @@ class StorageService {
   }
 
   private async _delete(key: string, id: string): Promise<boolean> {
+    await assertWorkspaceReady();
     const docRef = doc(getWorkspaceCollectionRef(key), id);
     await deleteDoc(docRef);
     return true;
@@ -498,6 +523,7 @@ class StorageService {
   }
 
   private async _addDailyReport(report: Partial<DailyReport>): Promise<DailyReport> {
+    await assertWorkspaceReady();
     const existing = await this.getDailyReportByDate(report.date || '');
     if (existing) {
       const updated = await this._update<DailyReport>(STORAGE_KEYS.REPORTS, existing.id, {
@@ -517,6 +543,7 @@ class StorageService {
   }
 
   private async _finishDay(date: string): Promise<ReportsHistory | null> {
+    await assertWorkspaceReady();
     const existing = await this.getDailyReportByDate(date);
     if (!existing) {
       return null;
@@ -669,20 +696,60 @@ class StorageService {
   }
 
   // Заметки — локальное хранение в AsyncStorage для каждого устройства
+
   async getNotes(): Promise<Note[]> {
     try {
-      const localNotesJson = await AsyncStorage.getItem(this.getNotesLocalKey());
+      const key = this.getNotesLocalKey();
+      const localNotesJson = await AsyncStorage.getItem(key);
+      console.log(`[storage.ts:getNotes] key=${key}, found=${!!localNotesJson}`);
       notes = localNotesJson ? JSON.parse(localNotesJson) : [];
     } catch (e) {
-      console.error('Error loading notes from AsyncStorage:', e);
+      console.error('[storage.ts:getNotes] Error loading notes from AsyncStorage:', e);
     }
     return [...notes].sort((a, b) => (a.completed === b.completed ? 0 : a.completed ? 1 : -1));
+  }
+
+  // Внутренняя реализация — не использует enqueueWrite, безопасно вызывать внутри других операций очереди
+  private async _updateNoteLocal(id: string, updates: Partial<Note>): Promise<Note | null> {
+    const key = this.getNotesLocalKey();
+    console.log(`[storage.ts:_updateNoteLocal] key=${key}, id=${id}, updates=`, updates);
+    const localNotesJson = await AsyncStorage.getItem(key);
+    let currentNotes: Note[] = localNotesJson ? JSON.parse(localNotesJson) : notes;
+
+    const index = currentNotes.findIndex(n => n.id === id);
+    if (index !== -1) {
+      currentNotes[index] = {
+        ...currentNotes[index],
+        ...updates,
+        updatedAt: new Date().toISOString(),
+      };
+      notes = [...currentNotes];
+      await AsyncStorage.setItem(key, JSON.stringify(notes));
+      console.log(`[storage.ts:_updateNoteLocal] SUCCESS id=${id}, completed=${currentNotes[index].completed}`);
+      return notes[index];
+    }
+    console.warn(`[storage.ts:_updateNoteLocal] Note id=${id} NOT FOUND in ${currentNotes.length} notes`);
+    return null;
+  }
+
+  // Публичный метод — ставит операцию в очередь
+  async updateNote(id: string, updates: Partial<Note>): Promise<Note | null> {
+    return this.enqueueWrite(async () => {
+      try {
+        return await this._updateNoteLocal(id, updates);
+      } catch (e) {
+        console.error('[storage.ts:updateNote] Error updating note in AsyncStorage:', e);
+        throw e;
+      }
+    });
   }
 
   async addNote(note: Omit<Note, 'id' | 'createdAt' | 'updatedAt'>): Promise<Note> {
     return this.enqueueWrite(async () => {
       try {
-        const existing = await AsyncStorage.getItem(this.getNotesLocalKey());
+        const key = this.getNotesLocalKey();
+        console.log(`[storage.ts:addNote] START key=${key}, title="${note.title}"`);
+        const existing = await AsyncStorage.getItem(key);
         const currentNotes: Note[] = existing ? JSON.parse(existing) : [];
 
         const newNote: Note = {
@@ -694,57 +761,44 @@ class StorageService {
           updatedAt: new Date().toISOString(),
         };
 
-        notes = [newNote, ...currentNotes];
-        await AsyncStorage.setItem(this.getNotesLocalKey(), JSON.stringify(notes));
+        const updated = [newNote, ...currentNotes];
+        notes = updated;
+        await AsyncStorage.setItem(key, JSON.stringify(updated));
+        console.log(`[storage.ts:addNote] SUCCESS id=${newNote.id}, total=${updated.length}`);
         return newNote;
       } catch (e) {
-        console.error('Error adding note to AsyncStorage:', e);
+        console.error('[storage.ts:addNote] Error adding note to AsyncStorage:', e);
         throw e;
       }
     });
   }
 
-  async updateNote(id: string, updates: Partial<Note>): Promise<Note | null> {
-    return this.enqueueWrite(async () => {
-      try {
-        const localNotesJson = await AsyncStorage.getItem(this.getNotesLocalKey());
-        let currentNotes: Note[] = localNotesJson ? JSON.parse(localNotesJson) : notes;
+  // Внутренняя реализация удаления без enqueueWrite
+  private async _deleteNoteLocal(id: string): Promise<boolean> {
+    const key = this.getNotesLocalKey();
+    console.log(`[storage.ts:_deleteNoteLocal] key=${key}, id=${id}`);
+    const localNotesJson = await AsyncStorage.getItem(key);
+    let currentNotes: Note[] = localNotesJson ? JSON.parse(localNotesJson) : notes;
 
-        const index = currentNotes.findIndex(n => n.id === id);
-        if (index !== -1) {
-          currentNotes[index] = {
-            ...currentNotes[index],
-            ...updates,
-            updatedAt: new Date().toISOString(),
-          };
-          notes = [...currentNotes];
-          await AsyncStorage.setItem(this.getNotesLocalKey(), JSON.stringify(notes));
-          return notes[index];
-        }
-        return null;
-      } catch (e) {
-        console.error('Error updating note in AsyncStorage:', e);
-        throw e;
-      }
-    });
+    const initialLen = currentNotes.length;
+    currentNotes = currentNotes.filter(n => n.id !== id);
+    if (currentNotes.length !== initialLen) {
+      notes = [...currentNotes];
+      await AsyncStorage.setItem(key, JSON.stringify(notes));
+      console.log(`[storage.ts:_deleteNoteLocal] SUCCESS id=${id}, remaining=${currentNotes.length}`);
+      return true;
+    }
+    console.warn(`[storage.ts:_deleteNoteLocal] Note id=${id} not found`);
+    return false;
   }
 
+  // Публичный метод — ставит операцию в очередь
   async deleteNote(id: string): Promise<boolean> {
     return this.enqueueWrite(async () => {
       try {
-        const localNotesJson = await AsyncStorage.getItem(this.getNotesLocalKey());
-        let currentNotes: Note[] = localNotesJson ? JSON.parse(localNotesJson) : notes;
-
-        const initialLen = currentNotes.length;
-        currentNotes = currentNotes.filter(n => n.id !== id);
-        if (currentNotes.length !== initialLen) {
-          notes = [...currentNotes];
-          await AsyncStorage.setItem(this.getNotesLocalKey(), JSON.stringify(notes));
-          return true;
-        }
-        return false;
+        return await this._deleteNoteLocal(id);
       } catch (e) {
-        console.error('Error deleting note from AsyncStorage:', e);
+        console.error('[storage.ts:deleteNote] Error deleting note from AsyncStorage:', e);
         throw e;
       }
     });
@@ -753,8 +807,12 @@ class StorageService {
   async deleteDailyAction(dateOrActionId: string, printerName?: string, actionIdParam?: string | number): Promise<boolean> {
     return this.enqueueWrite(async () => {
       try {
+        if (!currentWorkspaceId) {
+          console.error('[storage.ts:deleteDailyAction] ABORTED: workspaceId is null. Cannot perform Firestore operations.');
+          return false;
+        }
         const actionId = String(actionIdParam || dateOrActionId);
-        console.log(`[storage.ts:deleteDailyAction] START searching for actionId=${actionId}`);
+        console.log(`[storage.ts:deleteDailyAction] START searching for actionId=${actionId}, workspaceId=${currentWorkspaceId}`);
 
         // 1. Поиск во всех DailyReport
         const reports = await this.getDailyReports();
@@ -818,7 +876,7 @@ class StorageService {
                 );
                 if (targetNote) {
                   console.log(`[storage.ts:deleteDailyAction] Resetting task ${targetNote.id} ("${targetNote.title}") to completed=false`);
-                  await this.updateNote(targetNote.id, { completed: false });
+                  await this._updateNoteLocal(targetNote.id, { completed: false });
                 }
               } catch (noteErr) {
                 console.warn('[storage.ts:deleteDailyAction] Could not reset task completed status:', noteErr);
@@ -861,7 +919,7 @@ class StorageService {
             );
             if (targetNote) {
               console.log(`[storage.ts:deleteDailyAction] Resetting task ${targetNote.id} ("${targetNote.title}") to completed=false`);
-              await this.updateNote(targetNote.id, { completed: false });
+              await this._updateNoteLocal(targetNote.id, { completed: false });
             }
           } catch (noteErr) {
             console.warn('[storage.ts:deleteDailyAction] Could not reset task completed status:', noteErr);
@@ -885,29 +943,37 @@ class StorageService {
     return this.enqueueWrite(async () => {
       try {
         console.log(`[storage.ts:cancelNoteCompletion] START noteId=${noteId}, noteTitle="${noteTitle}"`);
-        
-        // 1. Сбрасываем статус задачи (completed: false) через официальный метод updateNote
+
+        // 1. Сбрасываем статус задачи (completed: false) — только AsyncStorage, не требует workspaceId
         try {
-          await this.updateNote(noteId, { completed: false });
-          console.log(`[storage.ts:cancelNoteCompletion] Task ${noteId} status set to completed=false.`);
+          const result = await this._updateNoteLocal(noteId, { completed: false });
+          console.log(`[storage.ts:cancelNoteCompletion] Task ${noteId} status set to completed=false. result=`, result);
         } catch (updateErr) {
           console.warn('[storage.ts:cancelNoteCompletion] Warning updating note status:', updateErr);
         }
 
+        // Остальные операции идут в Firestore — ждём workspaceId
+        if (!currentWorkspaceId) {
+          console.log('[storage.ts:cancelNoteCompletion] No workspaceId, skipping Firestore cleanup (note status already saved).');
+          return true;
+        }
+
         // 2. Ищем и удаляем соответствующую запись в PrinterLog
+        console.log('[storage.ts:cancelNoteCompletion] Searching PrinterLog for matching entry...');
         const allLogs = await this.getPrinterLogs();
         const matchingLog = allLogs.find(
           l => (l.noteId && l.noteId === noteId) || (l.description && (l.description === noteTitle || l.description.includes(noteTitle)))
         );
 
         if (matchingLog) {
-          console.log(`[storage.ts:cancelNoteCompletion] Found matching PrinterLog:`, matchingLog);
+          console.log(`[storage.ts:cancelNoteCompletion] Found matching PrinterLog id=${matchingLog.id}`);
           if (matchingLog.partId && matchingLog.quantityDeducted && matchingLog.quantityDeducted > 0) {
             try {
               const partsList = await this.getParts();
               const part = partsList.find(p => p.id === matchingLog.partId);
               if (part) {
                 const restoredQty = part.quantity + matchingLog.quantityDeducted;
+                console.log(`[storage.ts:cancelNoteCompletion] Restocking part ${part.id}: +${matchingLog.quantityDeducted} -> ${restoredQty}`);
                 await this._update<Part>(STORAGE_KEYS.PARTS, part.id, { quantity: restoredQty });
               }
             } catch (restockErr) {
@@ -916,9 +982,12 @@ class StorageService {
           }
           await this._delete(STORAGE_KEYS.PRINTER_LOGS, matchingLog.id);
           console.log(`[storage.ts:cancelNoteCompletion] PrinterLog deleted.`);
+        } else {
+          console.log('[storage.ts:cancelNoteCompletion] No matching PrinterLog found.');
         }
 
         // 3. Ищем и удаляем запись в DailyReport
+        console.log('[storage.ts:cancelNoteCompletion] Searching DailyReports for matching actions...');
         const reports = await this.getDailyReports();
         for (const report of reports) {
           let reportModified = false;
@@ -930,7 +999,7 @@ class StorageService {
 
             if (aIdx !== -1) {
               const action = entry.actions[aIdx];
-              console.log(`[storage.ts:cancelNoteCompletion] Found matching action in report:`, action);
+              console.log(`[storage.ts:cancelNoteCompletion] Found matching action in report ${report.id}:`, action);
 
               if (action && action.partId && action.quantity && action.quantity > 0) {
                 try {
@@ -960,7 +1029,7 @@ class StorageService {
               entries: report.entries,
               updatedAt: new Date().toISOString(),
             }, { merge: true });
-            console.log(`[storage.ts:cancelNoteCompletion] DailyReport updated.`);
+            console.log(`[storage.ts:cancelNoteCompletion] DailyReport ${report.id} updated.`);
           }
         }
 
@@ -1086,6 +1155,7 @@ class StorageService {
 
   async addPrinterLog(log: Omit<PrinterLog, 'id'>): Promise<PrinterLog> {
     return this.enqueueWrite(async () => {
+      await assertWorkspaceReady();
       const id = generateId();
       
       // Если указаны детали для списания (массив или одиночная деталь)

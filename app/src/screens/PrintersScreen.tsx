@@ -1060,169 +1060,173 @@ export default function PrintersScreen({ initialPrinterId }: { initialPrinterId?
         animationType="slide"
         onRequestClose={() => setSelectedHistoryPrinter(null)}
       >
-        <TouchableWithoutFeedback onPress={() => setSelectedHistoryPrinter(null)}>
-          <View style={styles.modalOverlay}>
-            <TouchableWithoutFeedback onPress={() => {}}>
-              <KeyboardAvoidingView
-                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-                style={{ width: '100%', maxHeight: '90%', alignItems: 'center' }}
+        <View style={styles.modalOverlay}>
+          <TouchableWithoutFeedback onPress={() => setSelectedHistoryPrinter(null)}>
+            <View style={styles.modalBackdropTouch} />
+          </TouchableWithoutFeedback>
+
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            style={styles.historyModalContainer}
+          >
+            <View style={styles.historyModalContent}>
+              <View style={styles.historyHeader}>
+                <Text style={styles.historyTitle} numberOfLines={1}>
+                  История: {selectedHistoryPrinter?.name}
+                </Text>
+                <TouchableOpacity
+                  style={styles.closeButton}
+                  onPress={() => setSelectedHistoryPrinter(null)}
+                >
+                  <Text style={styles.closeButtonText}>Закрыть</Text>
+                </TouchableOpacity>
+              </View>
+
+              <TouchableOpacity
+                style={styles.addLogToggleButton}
+                onPress={() => setShowAddLogForm(prev => !prev)}
               >
-                <View style={[styles.modalContent, styles.historyModalContent]}>
-                  <View style={styles.historyHeader}>
-                    <Text style={styles.historyTitle} numberOfLines={1}>
-                      История: {selectedHistoryPrinter?.name}
-                    </Text>
+                <Text style={styles.addLogToggleText}>
+                  {showAddLogForm ? '✕ Скрыть форму' : '+ Добавить запись'}
+                </Text>
+              </TouchableOpacity>
+
+              {showAddLogForm && (
+                <View style={styles.logFormContainer}>
+                  <TextInput
+                    style={styles.logInput}
+                    placeholder="Описание работ (опционально)"
+                    placeholderTextColor="#999999"
+                    value={logDescription}
+                    onChangeText={setLogDescription}
+                    multiline
+                    numberOfLines={3}
+                  />
+
+                  <View style={styles.logPartSection}>
+                    <Text style={styles.formSectionLabel}>Списание деталей со склада:</Text>
+                    {selectedPartsForLog.length > 0 && (
+                      <View style={{ marginBottom: 8 }}>
+                        {selectedPartsForLog.map((item, index) => (
+                          <View key={item.part.id} style={[styles.selectedPartBadgeRow, { marginBottom: 6 }]}>
+                            <Text style={[styles.selectedPartBadgeText, { flex: 1 }]}>
+                              🔧 {item.part.partNumber} — {item.part.description} ({item.quantity} шт.)
+                            </Text>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                              <TouchableOpacity
+                                style={{ paddingHorizontal: 8, paddingVertical: 4, backgroundColor: '#eee', borderRadius: 4 }}
+                                onPress={() => {
+                                  setSelectedPartsForLog(prev => prev.map((p, i) => i === index ? { ...p, quantity: Math.max(1, p.quantity - 1) } : p));
+                                }}
+                              >
+                                <Text style={{ fontSize: 13, fontWeight: 'bold' }}>-</Text>
+                              </TouchableOpacity>
+                              <Text style={{ fontSize: 13, fontWeight: 'bold', minWidth: 16, textAlign: 'center' }}>{item.quantity}</Text>
+                              <TouchableOpacity
+                                style={{ paddingHorizontal: 8, paddingVertical: 4, backgroundColor: '#eee', borderRadius: 4 }}
+                                onPress={() => {
+                                  setSelectedPartsForLog(prev => prev.map((p, i) => i === index ? { ...p, quantity: Math.min(p.part.quantity, p.quantity + 1) } : p));
+                                }}
+                              >
+                                <Text style={{ fontSize: 13, fontWeight: 'bold' }}>+</Text>
+                              </TouchableOpacity>
+                              <TouchableOpacity
+                                style={styles.clearPartBtn}
+                                onPress={() => {
+                                  setSelectedPartsForLog(prev => prev.filter((_, i) => i !== index));
+                                }}
+                              >
+                                <Text style={styles.clearPartText}>✕</Text>
+                              </TouchableOpacity>
+                            </View>
+                          </View>
+                        ))}
+                      </View>
+                    )}
                     <TouchableOpacity
-                      style={styles.closeButton}
-                      onPress={() => setSelectedHistoryPrinter(null)}
+                      style={styles.selectPartBtn}
+                      onPress={() => setShowLogPartPicker(true)}
                     >
-                      <Text style={styles.closeButtonText}>Закрыть</Text>
+                      <Text style={styles.selectPartBtnText}>+ Добавить детали для списания</Text>
                     </TouchableOpacity>
                   </View>
 
-                  <TouchableOpacity
-                    style={styles.addLogToggleButton}
-                    onPress={() => setShowAddLogForm(prev => !prev)}
-                  >
-                    <Text style={styles.addLogToggleText}>
-                      {showAddLogForm ? '✕ Скрыть форму' : '+ Добавить запись'}
-                    </Text>
-                  </TouchableOpacity>
+                  <View style={styles.logFormButtons}>
+                    <TouchableOpacity
+                      style={styles.logCancelButton}
+                      onPress={() => {
+                        setShowAddLogForm(false);
+                        setLogDescription('');
+                        setSelectedPartsForLog([]);
+                      }}
+                    >
+                      <Text style={styles.logCancelButtonText}>Отмена</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.logSaveButton, savingLog && { opacity: 0.6 }]}
+                      onPress={handleSaveLog}
+                      disabled={savingLog}
+                    >
+                      <Text style={styles.logSaveButtonText}>
+                        {savingLog ? 'Сохранение...' : 'Сохранить'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
 
-                  {showAddLogForm && (
-                    <View style={styles.logFormContainer}>
-                      <TextInput
-                        style={styles.logInput}
-                        placeholder="Описание работ (опционально)"
-                        placeholderTextColor="#999999"
-                        value={logDescription}
-                        onChangeText={setLogDescription}
-                        multiline
-                        numberOfLines={3}
-                      />
+              <ScrollView 
+                style={styles.historyListScroll} 
+                contentContainerStyle={styles.historyListContent}
+                showsVerticalScrollIndicator={true}
+              >
+                {historyLogs.length === 0 ? (
+                  <Text style={styles.noLogsText}>История обслуживания пуста</Text>
+                ) : (
+                  historyLogs.map(item => {
+                    const formattedDate = new Date(item.date).toLocaleDateString('ru-RU', {
+                      day: '2-digit',
+                      month: '2-digit',
+                      year: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    });
 
-                      <View style={styles.logPartSection}>
-                        <Text style={styles.formSectionLabel}>Списание деталей со склада:</Text>
-                        {selectedPartsForLog.length > 0 && (
-                          <View style={{ marginBottom: 8 }}>
-                            {selectedPartsForLog.map((item, index) => (
-                              <View key={item.part.id} style={[styles.selectedPartBadgeRow, { marginBottom: 6 }]}>
-                                <Text style={[styles.selectedPartBadgeText, { flex: 1 }]}>
-                                  🔧 {item.part.partNumber} — {item.part.description} ({item.quantity} шт.)
-                                </Text>
-                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                                  <TouchableOpacity
-                                    style={{ paddingHorizontal: 8, paddingVertical: 4, backgroundColor: '#eee', borderRadius: 4 }}
-                                    onPress={() => {
-                                      setSelectedPartsForLog(prev => prev.map((p, i) => i === index ? { ...p, quantity: Math.max(1, p.quantity - 1) } : p));
-                                    }}
-                                  >
-                                    <Text style={{ fontSize: 13, fontWeight: 'bold' }}>-</Text>
-                                  </TouchableOpacity>
-                                  <Text style={{ fontSize: 13, fontWeight: 'bold', minWidth: 16, textAlign: 'center' }}>{item.quantity}</Text>
-                                  <TouchableOpacity
-                                    style={{ paddingHorizontal: 8, paddingVertical: 4, backgroundColor: '#eee', borderRadius: 4 }}
-                                    onPress={() => {
-                                      setSelectedPartsForLog(prev => prev.map((p, i) => i === index ? { ...p, quantity: Math.min(p.part.quantity, p.quantity + 1) } : p));
-                                    }}
-                                  >
-                                    <Text style={{ fontSize: 13, fontWeight: 'bold' }}>+</Text>
-                                  </TouchableOpacity>
-                                  <TouchableOpacity
-                                    style={styles.clearPartBtn}
-                                    onPress={() => {
-                                      setSelectedPartsForLog(prev => prev.filter((_, i) => i !== index));
-                                    }}
-                                  >
-                                    <Text style={styles.clearPartText}>✕</Text>
-                                  </TouchableOpacity>
-                                </View>
-                              </View>
+                    return (
+                      <View key={item.id} style={styles.logCard}>
+                        <View style={styles.logCardHeader}>
+                          <Text style={styles.logDate}>{formattedDate}</Text>
+                          <TouchableOpacity
+                            style={styles.deleteLogBtn}
+                            onPress={() => handleDeleteLog(item)}
+                          >
+                            <Text style={styles.deleteLogText}>🗑️</Text>
+                          </TouchableOpacity>
+                        </View>
+                        <Text style={styles.logDescription}>{item.description}</Text>
+                        {item.partsDeducted && item.partsDeducted.length > 0 ? (
+                          <View style={styles.partBadgeContainer}>
+                            {item.partsDeducted.map((pDeduct, pIdx) => (
+                              <Text key={pIdx} style={styles.partBadgeText}>
+                                🔧 Списано: {pDeduct.partName} ({pDeduct.quantity} шт.)
+                              </Text>
                             ))}
                           </View>
-                        )}
-                        <TouchableOpacity
-                          style={styles.selectPartBtn}
-                          onPress={() => setShowLogPartPicker(true)}
-                        >
-                          <Text style={styles.selectPartBtnText}>+ Добавить детали для списания</Text>
-                        </TouchableOpacity>
-                      </View>
-
-                      <View style={styles.logFormButtons}>
-                        <TouchableOpacity
-                          style={styles.logCancelButton}
-                          onPress={() => {
-                            setShowAddLogForm(false);
-                            setLogDescription('');
-                            setSelectedPartsForLog([]);
-                          }}
-                        >
-                          <Text style={styles.logCancelButtonText}>Отмена</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={[styles.logSaveButton, savingLog && { opacity: 0.6 }]}
-                          onPress={handleSaveLog}
-                          disabled={savingLog}
-                        >
-                          <Text style={styles.logSaveButtonText}>
-                            {savingLog ? 'Сохранение...' : 'Сохранить'}
-                          </Text>
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  )}
-
-                  <ScrollView style={styles.historyListScroll}>
-                    {historyLogs.length === 0 ? (
-                      <Text style={styles.noLogsText}>История обслуживания пуста</Text>
-                    ) : (
-                      historyLogs.map(item => {
-                        const formattedDate = new Date(item.date).toLocaleDateString('ru-RU', {
-                          day: '2-digit',
-                          month: '2-digit',
-                          year: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        });
-
-                        return (
-                          <View key={item.id} style={styles.logCard}>
-                            <View style={styles.logCardHeader}>
-                              <Text style={styles.logDate}>{formattedDate}</Text>
-                              <TouchableOpacity
-                                style={styles.deleteLogBtn}
-                                onPress={() => handleDeleteLog(item)}
-                              >
-                                <Text style={styles.deleteLogText}>🗑️</Text>
-                              </TouchableOpacity>
-                            </View>
-                            <Text style={styles.logDescription}>{item.description}</Text>
-                            {item.partsDeducted && item.partsDeducted.length > 0 ? (
-                              <View style={styles.partBadgeContainer}>
-                                {item.partsDeducted.map((pDeduct, pIdx) => (
-                                  <Text key={pIdx} style={styles.partBadgeText}>
-                                    🔧 Списано: {pDeduct.partName} ({pDeduct.quantity} шт.)
-                                  </Text>
-                                ))}
-                              </View>
-                            ) : item.partName ? (
-                              <View style={styles.partBadgeContainer}>
-                                <Text style={styles.partBadgeText}>
-                                  🔧 Списано: {item.partName} {item.quantityDeducted ? `(${item.quantityDeducted} шт.)` : ''}
-                                </Text>
-                              </View>
-                            ) : null}
+                        ) : item.partName ? (
+                          <View style={styles.partBadgeContainer}>
+                            <Text style={styles.partBadgeText}>
+                              🔧 Списано: {item.partName} {item.quantityDeducted ? `(${item.quantityDeducted} шт.)` : ''}
+                            </Text>
                           </View>
-                        );
-                      })
-                    )}
-                  </ScrollView>
-                </View>
-              </KeyboardAvoidingView>
-            </TouchableWithoutFeedback>
-          </View>
-        </TouchableWithoutFeedback>
+                        ) : null}
+                      </View>
+                    );
+                  })
+                )}
+              </ScrollView>
+            </View>
+          </KeyboardAvoidingView>
+        </View>
       </Modal>
 
       {/* Log Part Picker Modal */}
@@ -1526,12 +1530,21 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
   },
-  historyModalContent: {
+  modalBackdropTouch: {
+    flex: 1,
+    width: '100%',
+  },
+  historyModalContainer: {
+    width: '100%',
+    height: '85%',
     backgroundColor: 'white',
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
+  },
+  historyModalContent: {
+    flex: 1,
+    width: '100%',
     padding: 16,
-    maxHeight: '85%',
   },
   historyHeader: {
     flexDirection: 'row',
@@ -1664,7 +1677,12 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   historyListScroll: {
-    maxHeight: 350,
+    flex: 1,
+    width: '100%',
+  },
+  historyListContent: {
+    paddingBottom: 24,
+    flexGrow: 1,
   },
   logCard: {
     backgroundColor: '#fff',

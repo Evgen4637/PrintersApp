@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "app",
+    "name": "Принтеры",
     "slug": "app",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -30,7 +30,8 @@
     "extra": {
       "eas": {
         "projectId": "59186ec1-36fc-4903-83d7-675065a145c5"
-      }
+      },
+      "privacyPolicyUrl": "https://www.freeprivacypolicy.com/live/057cddbc-ad99-44c6-96e2-9b8f38ee16e5"
     },
     "plugins": [
       "expo-font"

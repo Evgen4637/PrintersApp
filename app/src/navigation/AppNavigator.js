@@ -106,6 +106,13 @@ export default function AppNavigator() {
           },
           tabBarActiveTintColor: '#007AFF',
           tabBarInactiveTintColor: 'gray',
+          tabBarLabelStyle: {
+            fontSize: 11,
+            fontWeight: '600',
+          },
+          tabBarItemStyle: {
+            paddingHorizontal: 2,
+          },
           headerShown: false,
         })}
       >

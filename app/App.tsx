@@ -210,8 +210,9 @@ function BottomNav({ currentScreen, onNavigate }: { currentScreen: ScreenName; o
         styles.navLabel,
         isFocused && styles.navLabelActiveText,
       ]}
-      numberOfLines={2}
+      numberOfLines={1}
       adjustsFontSizeToFit={true}
+      minimumFontScale={0.8}
     >
       {label}
     </Text>
@@ -308,7 +309,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     paddingVertical: 8,
-    paddingHorizontal: 2,
+    paddingHorizontal: 1,
   },
   navButtonActive: {
     backgroundColor: '#E3F2FD',
@@ -319,14 +320,14 @@ const styles = StyleSheet.create({
   },
   navLabel: {
     width: '100%',
-    flexWrap: 'wrap',
     fontSize: 10,
     lineHeight: 12,
     color: '#333',
     textAlign: 'center',
+    fontWeight: '500',
   },
   navLabelActiveText: {
     color: '#007AFF',
-    fontWeight: 'bold',
+    fontWeight: '600',
   },
 });

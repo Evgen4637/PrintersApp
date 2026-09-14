@@ -11,6 +11,8 @@ import {
   Modal,
   KeyboardAvoidingView,
   Platform,
+  Keyboard,
+  Dimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
@@ -298,18 +300,22 @@ export default function PrintersScreen({ initialPrinterId }: { initialPrinterId?
   };
 
   const handleOpenModelPicker = () => {
+    Keyboard.dismiss();
     setShowModelPicker(true);
   };
 
   const handleOpenLocationPicker = () => {
+    Keyboard.dismiss();
     setShowLocationPicker(true);
   };
 
   const handleCloseModelPicker = () => {
+    Keyboard.dismiss();
     setShowModelPicker(false);
   };
 
   const handleCloseLocationPicker = () => {
+    Keyboard.dismiss();
     setShowLocationPicker(false);
   };
 
@@ -335,6 +341,7 @@ export default function PrintersScreen({ initialPrinterId }: { initialPrinterId?
 
   // Model Manager functions
   const handleOpenModelManager = () => {
+    Keyboard.dismiss();
     resetModelForm();
     setModelManagerMode('list');
     setShowModelManager(true);
@@ -464,6 +471,7 @@ export default function PrintersScreen({ initialPrinterId }: { initialPrinterId?
   };
 
   const handleCancelModel = () => {
+    Keyboard.dismiss();
     setModelManagerMode('list');
     resetModelForm();
   };
@@ -480,7 +488,7 @@ export default function PrintersScreen({ initialPrinterId }: { initialPrinterId?
     return (
       <KeyboardAvoidingView 
         style={[styles.container, { paddingTop: insets.top }]}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <ScrollView style={styles.formScroll} keyboardShouldPersistTaps="handled">
           <View style={styles.header}>
@@ -595,40 +603,54 @@ export default function PrintersScreen({ initialPrinterId }: { initialPrinterId?
           transparent={true}
           animationType="slide"
           onRequestClose={handleCloseModelPicker}
+          onShow={() => Keyboard.dismiss()}
         >
           <TouchableWithoutFeedback onPress={handleCloseModelPicker}>
             <View style={styles.modalOverlay}>
-              <TouchableWithoutFeedback onPress={() => {}}>
-                <View style={styles.modalContent}>
-                  <ScrollView style={styles.modalScroll}>
-                    <Text style={styles.modalTitle}>Выберите модель</Text>
-                    {models.length === 0 ? (
-                      <Text style={styles.modalEmptyText}>Нет доступных моделей. Добавьте модель через кнопку ✏️</Text>
-                    ) : (
-                      models.map(model => (
-                        <TouchableOpacity
-                          key={model.id}
-                          style={styles.modalItem}
-                          onPress={() => {
-                            setSelectedModelId(model.id);
-                          }}
-                        >
-                          <Text style={styles.modalItemText}>{model.name}</Text>
-                          {selectedModelId === model.id && (
-                            <Text style={styles.modalCheck}>✓</Text>
-                          )}
-                        </TouchableOpacity>
-                      ))
-                    )}
-                  </ScrollView>
-                  <TouchableOpacity
-                    style={styles.modalCancelButton}
-                    onPress={handleCloseModelPicker}
-                  >
-                    <Text style={styles.modalCancelText}>Закрыть</Text>
-                  </TouchableOpacity>
-                </View>
-              </TouchableWithoutFeedback>
+              <KeyboardAvoidingView
+                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                style={{ width: '100%', justifyContent: 'flex-end' }}
+              >
+                <TouchableWithoutFeedback onPress={() => {}}>
+                  <View style={[styles.modalContent, styles.modelPickerContent]}>
+                    <View style={styles.modalHeader}>
+                      <Text style={[styles.modalTitle, { marginBottom: 0 }]}>Выберите модель</Text>
+                    </View>
+                    <ScrollView
+                      style={styles.modelPickerScroll}
+                      contentContainerStyle={{ flexGrow: 0 }}
+                      keyboardShouldPersistTaps="handled"
+                      scrollEnabled={models.length > 6}
+                    >
+                      {models.length === 0 ? (
+                        <Text style={styles.modalEmptyText}>Нет доступных моделей. Добавьте модель через кнопку ✏️</Text>
+                      ) : (
+                        models.map(model => (
+                          <TouchableOpacity
+                            key={model.id}
+                            style={styles.modalItem}
+                            onPress={() => {
+                              setSelectedModelId(model.id);
+                              handleCloseModelPicker();
+                            }}
+                          >
+                            <Text style={styles.modalItemText}>{model.name}</Text>
+                            {selectedModelId === model.id && (
+                              <Text style={styles.modalCheck}>✓</Text>
+                            )}
+                          </TouchableOpacity>
+                        ))
+                      )}
+                    </ScrollView>
+                    <TouchableOpacity
+                      style={[styles.modalCancelButton, { paddingBottom: Math.max(insets.bottom, 16) }]}
+                      onPress={handleCloseModelPicker}
+                    >
+                      <Text style={styles.modalCancelText}>Закрыть</Text>
+                    </TouchableOpacity>
+                  </View>
+                </TouchableWithoutFeedback>
+              </KeyboardAvoidingView>
             </View>
           </TouchableWithoutFeedback>
         </Modal>
@@ -639,45 +661,51 @@ export default function PrintersScreen({ initialPrinterId }: { initialPrinterId?
           transparent={true}
           animationType="slide"
           onRequestClose={handleCloseLocationPicker}
+          onShow={() => Keyboard.dismiss()}
         >
           <TouchableWithoutFeedback onPress={handleCloseLocationPicker}>
             <View style={styles.modalOverlay}>
-              <TouchableWithoutFeedback onPress={() => {}}>
-                <View style={styles.modalContent}>
-                  <ScrollView style={styles.modalScroll}>
-                    <Text style={styles.modalTitle}>Выберите помещение</Text>
-                    {locations.length === 0 ? (
-                      <Text style={styles.modalEmptyText}>Нет доступных помещений. Создайте их в разделе «Помещения».</Text>
-                    ) : (
-                      locations.map(loc => (
-                        <TouchableOpacity
-                          key={`${loc.building}-${loc.room}`}
-                          style={styles.modalItem}
-                          onPress={() => {
-                            setSelectedLocation(loc);
-                            handleCloseLocationPicker();
-                          }}
-                        >
-                          <Text style={styles.modalItemText}>
-                            {loc.building}, к. {loc.room}
-                          </Text>
-                          {selectedLocation &&
-                           selectedLocation.building === loc.building &&
-                           selectedLocation.room === loc.room && (
-                            <Text style={styles.modalCheck}>✓</Text>
-                          )}
-                        </TouchableOpacity>
-                      ))
-                    )}
-                  </ScrollView>
-                  <TouchableOpacity
-                    style={styles.modalCancelButton}
-                    onPress={handleCloseLocationPicker}
-                  >
-                    <Text style={styles.modalCancelText}>Закрыть</Text>
-                  </TouchableOpacity>
-                </View>
-              </TouchableWithoutFeedback>
+              <KeyboardAvoidingView
+                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                style={{ width: '100%', justifyContent: 'flex-end' }}
+              >
+                <TouchableWithoutFeedback onPress={() => {}}>
+                  <View style={styles.modalContent}>
+                    <ScrollView style={styles.modalScroll} keyboardShouldPersistTaps="handled">
+                      <Text style={styles.modalTitle}>Выберите помещение</Text>
+                      {locations.length === 0 ? (
+                        <Text style={styles.modalEmptyText}>Нет доступных помещений. Создайте их в разделе «Помещения».</Text>
+                      ) : (
+                        locations.map(loc => (
+                          <TouchableOpacity
+                            key={`${loc.building}-${loc.room}`}
+                            style={styles.modalItem}
+                            onPress={() => {
+                              setSelectedLocation(loc);
+                              handleCloseLocationPicker();
+                            }}
+                          >
+                            <Text style={styles.modalItemText}>
+                              {loc.building}, к. {loc.room}
+                            </Text>
+                            {selectedLocation &&
+                             selectedLocation.building === loc.building &&
+                             selectedLocation.room === loc.room && (
+                              <Text style={styles.modalCheck}>✓</Text>
+                            )}
+                          </TouchableOpacity>
+                        ))
+                      )}
+                    </ScrollView>
+                    <TouchableOpacity
+                      style={[styles.modalCancelButton, { paddingBottom: Math.max(insets.bottom, 16) }]}
+                      onPress={handleCloseLocationPicker}
+                    >
+                      <Text style={styles.modalCancelText}>Закрыть</Text>
+                    </TouchableOpacity>
+                  </View>
+                </TouchableWithoutFeedback>
+              </KeyboardAvoidingView>
             </View>
           </TouchableWithoutFeedback>
         </Modal>
@@ -688,107 +716,128 @@ export default function PrintersScreen({ initialPrinterId }: { initialPrinterId?
           transparent={true}
           animationType="slide"
           onRequestClose={() => {
+            Keyboard.dismiss();
             setShowModelManager(false);
             setModelManagerMode('list');
             resetModelForm();
           }}
+          onShow={() => Keyboard.dismiss()}
         >
           <View style={styles.modalOverlay}>
-            <View style={[styles.modalContent, styles.modelManagerContent]}>
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Управление моделями</Text>
+            <KeyboardAvoidingView
+              behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+              style={{ width: '100%', maxHeight: '90%', justifyContent: 'flex-end' }}
+            >
+              <View style={[styles.modalContent, styles.modelManagerContent]}>
+                <View style={styles.modalHeader}>
+                  <Text style={styles.modalTitle}>Управление моделями</Text>
+                  {modelManagerMode === 'list' && (
+                    <TouchableOpacity style={styles.addModelButton} onPress={handleAddModel}>
+                      <Text style={styles.addModelButtonText}>+ Добавить новую модель</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+
+                {modelManagerMode === 'list' ? (
+                  models.length === 0 ? (
+                    <Text style={styles.modalEmptyText}>Модели не добавлены</Text>
+                  ) : (
+                    <ScrollView
+                      style={styles.modalScroll}
+                      contentContainerStyle={{ flexGrow: 0 }}
+                      scrollEnabled={models.length > 6}
+                      keyboardShouldPersistTaps="handled"
+                    >
+                      {models.map(model => (
+                        <TouchableOpacity
+                          key={model.id}
+                          style={styles.modalItem}
+                          onPress={() => handleEditModel(model)}
+                        >
+                          <View style={styles.modalItemContent}>
+                            <Text style={styles.modalItemText}>{model.name}</Text>
+                            {model.description && (
+                              <Text style={styles.modalItemDescription}>{model.description}</Text>
+                            )}
+                          </View>
+                          <View style={styles.modalItemActions}>
+                            <TouchableOpacity
+                              style={styles.editModelButton}
+                              onPress={() => handleEditModel(model)}
+                            >
+                              <Text style={styles.editModelButtonText}>✏️</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              style={styles.deleteModelButton}
+                              onPress={() => handleDeleteModel(model)}
+                            >
+                              <Text style={styles.deleteModelButtonText}>🗑</Text>
+                            </TouchableOpacity>
+                          </View>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  )
+                ) : (
+                  <ScrollView 
+                    style={styles.modalScroll} 
+                    contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 20) }}
+                    keyboardShouldPersistTaps="handled"
+                  >
+                    <View style={styles.modelForm}>
+                      <View style={styles.formGroup}>
+                        <Text style={styles.label}>Название модели *</Text>
+                        <TextInput
+                          style={styles.input}
+                          value={modelName}
+                          onChangeText={setModelName}
+                          placeholder="Например: Ricoh IM C300"
+                          placeholderTextColor="#999999"
+                          autoCapitalize="none"
+                          autoCorrect={false}
+                        />
+                      </View>
+
+                      <View style={styles.formGroup}>
+                        <Text style={styles.label}>Описание</Text>
+                        <TextInput
+                          style={[styles.input, styles.textArea]}
+                          value={modelDescription}
+                          onChangeText={setModelDescription}
+                          placeholder="Описание модели"
+                          placeholderTextColor="#999999"
+                          multiline
+                          numberOfLines={3}
+                          autoCapitalize="sentences"
+                          autoCorrect={false}
+                        />
+                      </View>
+
+                      <View style={[styles.buttonRow, { paddingBottom: Math.max(insets.bottom, 20) }]}>
+                        <TouchableOpacity style={[styles.button, styles.cancelButton]} onPress={handleCancelModel}>
+                          <Text style={styles.cancelButtonText}>Отмена</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={[styles.button, styles.saveButton]} onPress={handleSaveModel}>
+                          <Text style={styles.saveButtonText}>Сохранить</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  </ScrollView>
+                )}
+
                 {modelManagerMode === 'list' && (
-                  <TouchableOpacity style={styles.addModelButton} onPress={handleAddModel}>
-                    <Text style={styles.addModelButtonText}>+ Добавить новую модель</Text>
+                  <TouchableOpacity
+                    style={[styles.modalCancelButton, { paddingBottom: Math.max(insets.bottom, 16) }]}
+                    onPress={() => {
+                      Keyboard.dismiss();
+                      setShowModelManager(false);
+                    }}
+                  >
+                    <Text style={styles.modalCancelText}>Закрыть</Text>
                   </TouchableOpacity>
                 )}
               </View>
-
-              {modelManagerMode === 'list' ? (
-                models.length === 0 ? (
-                  <Text style={styles.modalEmptyText}>Модели не добавлены</Text>
-                ) : (
-                  <ScrollView style={styles.modalScroll}>
-                    {models.map(model => (
-                      <TouchableOpacity
-                        key={model.id}
-                        style={styles.modalItem}
-                        onPress={() => handleEditModel(model)}
-                      >
-                        <View style={styles.modalItemContent}>
-                          <Text style={styles.modalItemText}>{model.name}</Text>
-                          {model.description && (
-                            <Text style={styles.modalItemDescription}>{model.description}</Text>
-                          )}
-                        </View>
-                        <View style={styles.modalItemActions}>
-                          <TouchableOpacity
-                            style={styles.editModelButton}
-                            onPress={() => handleEditModel(model)}
-                          >
-                            <Text style={styles.editModelButtonText}>✏️</Text>
-                          </TouchableOpacity>
-                          <TouchableOpacity
-                            style={styles.deleteModelButton}
-                            onPress={() => handleDeleteModel(model)}
-                          >
-                            <Text style={styles.deleteModelButtonText}>🗑</Text>
-                          </TouchableOpacity>
-                        </View>
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
-                )
-              ) : (
-                <View style={styles.modelForm}>
-                  <View style={styles.formGroup}>
-                    <Text style={styles.label}>Название модели *</Text>
-                    <TextInput
-                      style={styles.input}
-                      value={modelName}
-                      onChangeText={setModelName}
-                      placeholder="Например: Ricoh IM C300"
-                      placeholderTextColor="#999999"
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                    />
-                  </View>
-
-                  <View style={styles.formGroup}>
-                    <Text style={styles.label}>Описание</Text>
-                    <TextInput
-                      style={[styles.input, styles.textArea]}
-                      value={modelDescription}
-                      onChangeText={setModelDescription}
-                      placeholder="Описание модели"
-                      placeholderTextColor="#999999"
-                      multiline
-                      numberOfLines={3}
-                      autoCapitalize="sentences"
-                      autoCorrect={false}
-                    />
-                  </View>
-
-                  <View style={styles.buttonRow}>
-                    <TouchableOpacity style={[styles.button, styles.cancelButton]} onPress={handleCancelModel}>
-                      <Text style={styles.cancelButtonText}>Отмена</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={[styles.button, styles.saveButton]} onPress={handleSaveModel}>
-                      <Text style={styles.saveButtonText}>Сохранить</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              )}
-
-              {modelManagerMode === 'list' && (
-                <TouchableOpacity
-                  style={styles.modalCancelButton}
-                  onPress={() => setShowModelManager(false)}
-                >
-                  <Text style={styles.modalCancelText}>Закрыть</Text>
-                </TouchableOpacity>
-              )}
-            </View>
+            </KeyboardAvoidingView>
           </View>
         </Modal>
       </KeyboardAvoidingView>
@@ -953,103 +1002,128 @@ export default function PrintersScreen({ initialPrinterId }: { initialPrinterId?
         transparent={true}
         animationType="slide"
         onRequestClose={() => {
+          Keyboard.dismiss();
           setShowModelManager(false);
           setModelManagerMode('list');
           resetModelForm();
         }}
+        onShow={() => Keyboard.dismiss()}
       >
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, styles.modelManagerContent]}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Управление моделями</Text>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            style={{ width: '100%', maxHeight: '90%', justifyContent: 'flex-end' }}
+          >
+            <View style={[styles.modalContent, styles.modelManagerContent]}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Управление моделями</Text>
+                {modelManagerMode === 'list' && (
+                  <TouchableOpacity style={styles.addModelButton} onPress={handleAddModel}>
+                    <Text style={styles.addModelButtonText}>+ Добавить новую модель</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              {modelManagerMode === 'list' ? (
+                models.length === 0 ? (
+                  <Text style={styles.modalEmptyText}>Модели не добавлены</Text>
+                ) : (
+                  <ScrollView
+                    style={styles.modalScroll}
+                    contentContainerStyle={{ flexGrow: 0 }}
+                    scrollEnabled={models.length > 6}
+                    keyboardShouldPersistTaps="handled"
+                  >
+                    {models.map(model => (
+                      <TouchableOpacity
+                        key={model.id}
+                        style={styles.modalItem}
+                        onPress={() => handleEditModel(model)}
+                      >
+                        <View style={styles.modalItemContent}>
+                          <Text style={styles.modalItemText}>{model.name}</Text>
+                          {model.description && (
+                            <Text style={styles.modalItemDescription}>{model.description}</Text>
+                          )}
+                        </View>
+                        <View style={styles.modalItemActions}>
+                          <TouchableOpacity
+                            style={styles.editModelButton}
+                            onPress={() => handleEditModel(model)}
+                          >
+                            <Text style={styles.editModelButtonText}>✏️</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={styles.deleteModelButton}
+                            onPress={() => handleDeleteModel(model)}
+                          >
+                            <Text style={styles.deleteModelButtonText}>🗑</Text>
+                          </TouchableOpacity>
+                        </View>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                )
+              ) : (
+                <ScrollView 
+                  style={styles.modalScroll} 
+                  contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 20) }}
+                  keyboardShouldPersistTaps="handled"
+                >
+                  <View style={styles.modelForm}>
+                    <View style={styles.formGroup}>
+                      <Text style={styles.label}>Название модели *</Text>
+                      <TextInput
+                        style={styles.input}
+                        value={modelName}
+                        onChangeText={setModelName}
+                        placeholder="Например: Ricoh IM C300"
+                        placeholderTextColor="#999999"
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                      />
+                    </View>
+
+                    <View style={styles.formGroup}>
+                      <Text style={styles.label}>Описание</Text>
+                      <TextInput
+                        style={[styles.input, styles.textArea]}
+                        value={modelDescription}
+                        onChangeText={setModelDescription}
+                        placeholder="Описание модели"
+                        placeholderTextColor="#999999"
+                        multiline
+                        numberOfLines={3}
+                        autoCapitalize="sentences"
+                        autoCorrect={false}
+                      />
+                    </View>
+
+                    <View style={[styles.buttonRow, { paddingBottom: Math.max(insets.bottom, 20) }]}>
+                      <TouchableOpacity style={[styles.button, styles.cancelButton]} onPress={handleCancelModel}>
+                        <Text style={styles.cancelButtonText}>Отмена</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={[styles.button, styles.saveButton]} onPress={handleSaveModel}>
+                        <Text style={styles.saveButtonText}>Сохранить</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </ScrollView>
+              )}
+
               {modelManagerMode === 'list' && (
-                <TouchableOpacity style={styles.addModelButton} onPress={handleAddModel}>
-                  <Text style={styles.addModelButtonText}>+ Добавить новую модель</Text>
+                <TouchableOpacity
+                  style={[styles.modalCancelButton, { paddingBottom: Math.max(insets.bottom, 16) }]}
+                  onPress={() => {
+                    Keyboard.dismiss();
+                    setShowModelManager(false);
+                  }}
+                >
+                  <Text style={styles.modalCancelText}>Закрыть</Text>
                 </TouchableOpacity>
               )}
             </View>
-
-            {modelManagerMode === 'list' ? (
-              models.length === 0 ? (
-                <Text style={styles.modalEmptyText}>Модели не добавлены</Text>
-              ) : (
-                models.map(model => (
-                  <TouchableOpacity
-                    key={model.id}
-                    style={styles.modalItem}
-                    onPress={() => handleEditModel(model)}
-                  >
-                    <View style={styles.modalItemContent}>
-                      <Text style={styles.modalItemText}>{model.name}</Text>
-                      {model.description && (
-                        <Text style={styles.modalItemDescription}>{model.description}</Text>
-                      )}
-                    </View>
-                    <View style={styles.modalItemActions}>
-                      <TouchableOpacity
-                        style={styles.editModelButton}
-                        onPress={() => handleEditModel(model)}
-                      >
-                        <Text style={styles.editModelButtonText}>✏️</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={styles.deleteModelButton}
-                        onPress={() => handleDeleteModel(model)}
-                      >
-                        <Text style={styles.deleteModelButtonText}>🗑</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </TouchableOpacity>
-                ))
-              )
-            ) : (
-              <View style={styles.modelForm}>
-                <View style={styles.formGroup}>
-                  <Text style={styles.label}>Название модели *</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={modelName}
-                    onChangeText={setModelName}
-                    placeholder="Например: Ricoh IM C300"
-                    placeholderTextColor="#999999"
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                  />
-                </View>
-
-                <View style={styles.formGroup}>
-                  <Text style={styles.label}>Описание</Text>
-                  <TextInput
-                    style={[styles.input, styles.textArea]}
-                    value={modelDescription}
-                    onChangeText={setModelDescription}
-                    placeholder="Описание модели"
-                    placeholderTextColor="#999999"
-                    multiline
-                    numberOfLines={3}
-                  />
-                </View>
-
-                <View style={styles.buttonRow}>
-                  <TouchableOpacity style={[styles.button, styles.cancelButton]} onPress={handleCancelModel}>
-                    <Text style={styles.cancelButtonText}>Отмена</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={[styles.button, styles.saveButton]} onPress={handleSaveModel}>
-                    <Text style={styles.saveButtonText}>Сохранить</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            )}
-
-            {modelManagerMode === 'list' && (
-              <TouchableOpacity
-                style={styles.modalCancelButton}
-                onPress={() => setShowModelManager(false)}
-              >
-                <Text style={styles.modalCancelText}>Закрыть</Text>
-              </TouchableOpacity>
-            )}
-          </View>
+          </KeyboardAvoidingView>
         </View>
       </Modal>
 
@@ -1858,11 +1932,16 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    maxHeight: '80%',
-    flexShrink: 1,
+    maxHeight: Dimensions.get('window').height * 0.8,
+  },
+  modelPickerContent: {
+    maxHeight: Dimensions.get('window').height * 0.8,
+  },
+  modelPickerScroll: {
+    maxHeight: Dimensions.get('window').height * 0.65,
   },
   modelManagerContent: {
-    maxHeight: '90%',
+    maxHeight: Dimensions.get('window').height * 0.85,
   },
   modalHeader: {
     padding: 20,

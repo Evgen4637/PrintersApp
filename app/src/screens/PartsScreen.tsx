@@ -481,7 +481,7 @@ export default function PartsScreen({ initialPartId }: { initialPartId?: string 
                     )}
                   </ScrollView>
                   <TouchableOpacity
-                    style={styles.modalCancelButton}
+                    style={[styles.modalCancelButton, { paddingBottom: Math.max(insets.bottom, 16) }]}
                     onPress={() => setShowLocationPicker(false)}
                   >
                     <Text style={styles.modalCancelText}>Отмена</Text>
@@ -551,7 +551,7 @@ export default function PartsScreen({ initialPartId }: { initialPartId?: string 
                     })()}
                   </ScrollView>
                   <TouchableOpacity
-                    style={styles.modalCancelButton}
+                    style={[styles.modalCancelButton, { paddingBottom: Math.max(insets.bottom, 16) }]}
                     onPress={() => setShowModelPicker(false)}
                   >
                     <Text style={styles.modalCancelText}>Готово</Text>
@@ -730,7 +730,7 @@ export default function PartsScreen({ initialPartId }: { initialPartId?: string 
                   )}
                 </ScrollView>
                 <TouchableOpacity
-                  style={styles.modalCancelButton}
+                  style={[styles.modalCancelButton, { paddingBottom: Math.max(insets.bottom, 16) }]}
                   onPress={() => setShowLocationPicker(false)}
                 >
                   <Text style={styles.modalCancelText}>Отмена</Text>
@@ -800,7 +800,7 @@ export default function PartsScreen({ initialPartId }: { initialPartId?: string 
                   })()}
                 </ScrollView>
                 <TouchableOpacity
-                  style={styles.modalCancelButton}
+                  style={[styles.modalCancelButton, { paddingBottom: Math.max(insets.bottom, 16) }]}
                   onPress={() => setShowModelPicker(false)}
                 >
                   <Text style={styles.modalCancelText}>Готово</Text>

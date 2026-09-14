@@ -9,6 +9,7 @@ import {
   TextInput,
   StyleSheet,
   Alert,
+  Keyboard,
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import storage from '../services/storage';
@@ -107,6 +108,7 @@ export default function BrandSelector({
       <TouchableOpacity
         style={styles.pickerSelectButton}
         onPress={() => {
+          Keyboard.dismiss();
           loadBrands();
           setShowModal(true);
         }}
@@ -123,7 +125,11 @@ export default function BrandSelector({
         visible={showModal}
         transparent={true}
         animationType="fade"
-        onRequestClose={() => setShowModal(false)}
+        onRequestClose={() => {
+          Keyboard.dismiss();
+          setShowModal(false);
+        }}
+        onShow={() => Keyboard.dismiss()}
       >
         <TouchableWithoutFeedback onPress={() => setShowModal(false)}>
           <View style={styles.modalOverlay}>

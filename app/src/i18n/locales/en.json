@@ -60,6 +60,33 @@
     "dailyReport": "Report",
     "notes": "Tasks"
   },
+  "tabHelp": {
+    "dashboard": {
+      "title": "Dashboard",
+      "message": "Operations hub for real-time monitoring of hardware status and service workflows.\n\n• Track high-level metrics for open tickets, supply levels, and device health.\n• Switch databases or facilities seamlessly if you support multiple sites.\n• Use your workshop code to sync data and collaborate with colleagues."
+    },
+    "printers": {
+      "title": "Printers",
+      "message": "Central catalog and registry for all printing hardware across your organization.\n\n• Register devices with assigned rooms, models, and hardware serial numbers.\n• Always verify the \"Brand\" field — it dictates available model selections.\n• Deduct parts directly via \"History\" or send retired devices to the archive."
+    },
+    "rooms": {
+      "title": "Locations",
+      "message": "Directory of physical sites: offices, rooms, server hubs, and supply closets.\n\n• Define locations to map hardware placement and allocate consumable inventory.\n• Identify device positions instantly when a service ticket is raised.\n• Filter your entire hardware fleet by specific rooms and departments."
+    },
+    "parts": {
+      "title": "Parts & Supplies",
+      "message": "Warehouse inventory system for replacement parts, toners, and maintenance kits.\n\n• Track incoming stock and monitor minimum thresholds for toners and rollers.\n• Select the correct \"Brand\" to enable precise compatibility matching during repairs.\n• Link parts directly to printer models for one-tap service deductions."
+    },
+    "knowledgeBase": {
+      "title": "Knowledge Base",
+      "message": "Engineering guide for service manuals, teardowns, and diagnostic trouble codes.\n\n• Store step-by-step disassembly guides, cartridge refilling steps, and error fixes.\n• Tag articles by equipment brand and model for instant searching.\n• Access verified technical solutions right at the customer workstation."
+    },
+    "tasks": {
+      "title": "Tasks",
+      "message": "Work order planner for dispatched repairs, preventive checks, and service tickets.\n\n• Create work orders, schedule deadlines, and log technical field notes.\n• Resolve tickets in one click with automatic inventory deductions from stock.\n• Complete inspections and preventative servicing without writing off parts."
+    },
+    "button": "Got it"
+  },
   "common": {
     "emptyList": "No records found",
     "addFirst": "+ Add first record",

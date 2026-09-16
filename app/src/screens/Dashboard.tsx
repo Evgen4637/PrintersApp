@@ -149,7 +149,13 @@ export default function DashboardScreen({ workspaceId, onLeaveWorkspace, onNavig
         </View>
         <TouchableOpacity
           style={{ marginRight: 15, padding: 4 }}
-          onPress={() => console.log('Открыть справку')}
+          onPress={() =>
+            Alert.alert(
+              t('tabHelp.dashboard.title'),
+              t('tabHelp.dashboard.message'),
+              [{ text: t('tabHelp.button'), style: 'default' }]
+            )
+          }
           activeOpacity={0.7}
         >
           <Ionicons name="help-circle-outline" size={26} color="white" />

@@ -321,7 +321,13 @@ export default function NotesScreen() {
           <Text style={styles.title}>{t('notes.title')}</Text>
           <TouchableOpacity
             style={{ marginRight: 15, padding: 4 }}
-            onPress={() => console.log('Открыть справку')}
+            onPress={() =>
+              Alert.alert(
+                t('tabHelp.tasks.title'),
+                t('tabHelp.tasks.message'),
+                [{ text: t('tabHelp.button'), style: 'default' }]
+              )
+            }
             activeOpacity={0.7}
           >
             <Ionicons name="help-circle-outline" size={26} color="white" />

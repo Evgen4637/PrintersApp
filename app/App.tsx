@@ -1,6 +1,6 @@
 import './src/i18n';
 import React, { useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Platform, AppState } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import * as NavigationBar from 'expo-navigation-bar';
@@ -39,10 +39,32 @@ function MainApp() {
   };
 
   useEffect(() => {
+    if (Platform.OS === 'android') {
+      // Скрываем нижнюю панель навигации
+      NavigationBar.setVisibilityAsync('hidden');
+      // Включаем поведение: при свайпе кнопки появляются на 2-3 секунды и автоматически скрываются обратно
+      NavigationBar.setBehaviorAsync('overlay-swipe');
+
+      const subscription = AppState.addEventListener('change', (nextAppState) => {
+        if (nextAppState === 'active') {
+          NavigationBar.setVisibilityAsync('hidden');
+          NavigationBar.setBehaviorAsync('overlay-swipe');
+        }
+      });
+
+      return () => {
+        subscription.remove();
+      };
+    }
+  }, []);
+
+  useEffect(() => {
     const initializeApp = async () => {
       try {
-        await NavigationBar.setVisibilityAsync("hidden");
-        await NavigationBar.setBehaviorAsync("overlay-swipe");
+        if (Platform.OS === 'android') {
+          await NavigationBar.setVisibilityAsync("hidden");
+          await NavigationBar.setBehaviorAsync("overlay-swipe");
+        }
         
         const onboarded = await AsyncStorage.getItem('@onboarding_complete');
         setHasSeenOnboarding(onboarded === 'true');

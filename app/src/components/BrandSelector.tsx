@@ -10,7 +10,9 @@ import {
   StyleSheet,
   Alert,
   Keyboard,
+  Platform,
 } from 'react-native';
+import * as NavigationBar from 'expo-navigation-bar';
 import { useTranslation } from 'react-i18next';
 import storage from '../services/storage';
 import { BrandItem } from '../models/types';
@@ -31,6 +33,13 @@ export default function BrandSelector({
   placeholder,
 }: BrandSelectorProps) {
   const { t } = useTranslation();
+
+  const ensureImmersiveMode = () => {
+    if (Platform.OS === 'android') {
+      NavigationBar.setVisibilityAsync('hidden');
+      NavigationBar.setBehaviorAsync('overlay-swipe');
+    }
+  };
   const [showModal, setShowModal] = useState(false);
   const [dbBrands, setDbBrands] = useState<BrandItem[]>([]);
   const [newBrandInput, setNewBrandInput] = useState('');
@@ -125,11 +134,16 @@ export default function BrandSelector({
         visible={showModal}
         transparent={true}
         animationType="fade"
+        statusBarTranslucent={true}
         onRequestClose={() => {
           Keyboard.dismiss();
           setShowModal(false);
+          ensureImmersiveMode();
         }}
-        onShow={() => Keyboard.dismiss()}
+        onShow={() => {
+          Keyboard.dismiss();
+          ensureImmersiveMode();
+        }}
       >
         <TouchableWithoutFeedback onPress={() => setShowModal(false)}>
           <View style={styles.modalOverlay}>

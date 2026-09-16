@@ -16,6 +16,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import storage from '../services/storage';
 import { Ionicons } from '@expo/vector-icons';
+import * as NavigationBar from 'expo-navigation-bar';
 import { KnowledgeBaseEntry, Part, PrinterModel, BrandItem } from '../models/types';
 import BrandSelector from '../components/BrandSelector';
 
@@ -25,6 +26,13 @@ type PartEditorMode = 'none' | 'add' | 'edit';
 export default function KnowledgeBaseScreen() {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
+
+  const ensureImmersiveMode = () => {
+    if (Platform.OS === 'android') {
+      NavigationBar.setVisibilityAsync('hidden');
+      NavigationBar.setBehaviorAsync('overlay-swipe');
+    }
+  };
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFilterBrand, setSelectedFilterBrand] = useState('Все');
   const [entries, setEntries] = useState<KnowledgeBaseEntry[]>([]);
@@ -791,9 +799,12 @@ export default function KnowledgeBaseScreen() {
         visible={isMainModalVisible && (mode === 'add' || mode === 'edit')}
         transparent={true}
         animationType="slide"
+        statusBarTranslucent={true}
+        onShow={ensureImmersiveMode}
         onRequestClose={() => {
           setIsMainModalVisible(false);
           setMode('list');
+          ensureImmersiveMode();
         }}
       >
         <KeyboardAvoidingView 
@@ -997,7 +1008,12 @@ export default function KnowledgeBaseScreen() {
         visible={showPartsPicker}
         transparent={true}
         animationType="slide"
-        onRequestClose={handleClosePartsPicker}
+        statusBarTranslucent={true}
+        onShow={ensureImmersiveMode}
+        onRequestClose={() => {
+          handleClosePartsPicker();
+          ensureImmersiveMode();
+        }}
       >
         <TouchableWithoutFeedback onPress={handleClosePartsPicker}>
           <View style={styles.modalOverlay}>
@@ -1071,9 +1087,14 @@ export default function KnowledgeBaseScreen() {
         visible={showKBModelPicker}
         transparent={true}
         animationType="fade"
-        onRequestClose={() => setShowKBModelPicker(false)}
+        statusBarTranslucent={true}
+        onShow={ensureImmersiveMode}
+        onRequestClose={() => {
+          setShowKBModelPicker(false);
+          ensureImmersiveMode();
+        }}
       >
-        <TouchableWithoutFeedback onPress={() => setShowKBModelPicker(false)}>
+        <TouchableWithoutFeedback onPress={() => { setShowKBModelPicker(false); ensureImmersiveMode(); }}>
           <View style={styles.modalOverlay}>
             <TouchableWithoutFeedback onPress={() => {}}>
               <View style={[styles.modalContent, { maxHeight: '80%' }]}>
@@ -1115,7 +1136,7 @@ export default function KnowledgeBaseScreen() {
                   </View>
                 </View>
 
-                <TouchableOpacity style={styles.modalCloseButton} onPress={() => setShowKBModelPicker(false)}>
+                <TouchableOpacity style={styles.modalCloseButton} onPress={() => { setShowKBModelPicker(false); ensureImmersiveMode(); }}>
                   <Text style={styles.modalCloseButtonText}>{t('common.close')}</Text>
                 </TouchableOpacity>
               </View>
@@ -1129,7 +1150,12 @@ export default function KnowledgeBaseScreen() {
         visible={partEditorMode !== 'none'}
         transparent={true}
         animationType="slide"
-        onRequestClose={() => handleClosePartEditor()}
+        statusBarTranslucent={true}
+        onShow={ensureImmersiveMode}
+        onRequestClose={() => {
+          handleClosePartEditor();
+          ensureImmersiveMode();
+        }}
       >
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, styles.partEditorContent]}>
@@ -1233,9 +1259,14 @@ export default function KnowledgeBaseScreen() {
         visible={showPartLocationPicker}
         transparent={true}
         animationType="slide"
-        onRequestClose={handleClosePartLocationPicker}
+        statusBarTranslucent={true}
+        onShow={ensureImmersiveMode}
+        onRequestClose={() => {
+          handleClosePartLocationPicker();
+          ensureImmersiveMode();
+        }}
       >
-        <TouchableWithoutFeedback onPress={handleClosePartLocationPicker}>
+        <TouchableWithoutFeedback onPress={() => { handleClosePartLocationPicker(); ensureImmersiveMode(); }}>
           <View style={styles.modalOverlay}>
             <TouchableWithoutFeedback onPress={() => {}}>
               <View style={styles.modalContent}>
@@ -1250,6 +1281,7 @@ export default function KnowledgeBaseScreen() {
                       onPress={() => {
                         setSelectedPartLocation(loc);
                         handleClosePartLocationPicker();
+                        ensureImmersiveMode();
                       }}
                     >
                       <Text style={styles.modalItemText}>
@@ -1265,7 +1297,10 @@ export default function KnowledgeBaseScreen() {
                 )}
                 <TouchableOpacity
                   style={styles.modalCancelButton}
-                  onPress={handleClosePartLocationPicker}
+                  onPress={() => {
+                    handleClosePartLocationPicker();
+                    ensureImmersiveMode();
+                  }}
                 >
                   <Text style={styles.modalCancelButtonText}>{t('common.close')}</Text>
                 </TouchableOpacity>
@@ -1280,7 +1315,12 @@ export default function KnowledgeBaseScreen() {
         visible={showPartModelPicker}
         transparent={true}
         animationType="slide"
-        onRequestClose={handleClosePartModelPicker}
+        statusBarTranslucent={true}
+        onShow={ensureImmersiveMode}
+        onRequestClose={() => {
+          handleClosePartModelPicker();
+          ensureImmersiveMode();
+        }}
       >
         <TouchableWithoutFeedback onPress={handleClosePartModelPicker}>
           <View style={styles.modalOverlay}>

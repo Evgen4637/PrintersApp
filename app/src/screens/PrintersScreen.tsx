@@ -19,6 +19,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import storage from '../services/storage';
 import { Ionicons } from '@expo/vector-icons';
+import * as NavigationBar from 'expo-navigation-bar';
 import { Printer, PrinterModel, PrinterLog, Part, BrandItem } from '../models/types';
 import BrandSelector from '../components/BrandSelector';
 
@@ -28,6 +29,13 @@ type ModelManagerMode = 'list' | 'add' | 'edit';
 export default function PrintersScreen({ initialPrinterId }: { initialPrinterId?: string }) {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
+
+  const ensureImmersiveMode = () => {
+    if (Platform.OS === 'android') {
+      NavigationBar.setVisibilityAsync('hidden');
+      NavigationBar.setBehaviorAsync('overlay-swipe');
+    }
+  };
   const [printers, setPrinters] = useState<Printer[]>([]);
   const [archivedPrinters, setArchivedPrinters] = useState<Printer[]>([]);
   const [isArchiveMode, setIsArchiveMode] = useState<boolean>(false);
@@ -622,8 +630,15 @@ export default function PrintersScreen({ initialPrinterId }: { initialPrinterId?
           visible={showModelPicker}
           transparent={true}
           animationType="slide"
-          onRequestClose={handleCloseModelPicker}
-          onShow={() => Keyboard.dismiss()}
+          statusBarTranslucent={true}
+          onRequestClose={() => {
+            handleCloseModelPicker();
+            ensureImmersiveMode();
+          }}
+          onShow={() => {
+            Keyboard.dismiss();
+            ensureImmersiveMode();
+          }}
         >
           <TouchableWithoutFeedback onPress={handleCloseModelPicker}>
             <View style={styles.modalOverlay}>
@@ -680,8 +695,15 @@ export default function PrintersScreen({ initialPrinterId }: { initialPrinterId?
           visible={showLocationPicker}
           transparent={true}
           animationType="slide"
-          onRequestClose={handleCloseLocationPicker}
-          onShow={() => Keyboard.dismiss()}
+          statusBarTranslucent={true}
+          onRequestClose={() => {
+            handleCloseLocationPicker();
+            ensureImmersiveMode();
+          }}
+          onShow={() => {
+            Keyboard.dismiss();
+            ensureImmersiveMode();
+          }}
         >
           <TouchableWithoutFeedback onPress={handleCloseLocationPicker}>
             <View style={styles.modalOverlay}>
@@ -709,9 +731,9 @@ export default function PrintersScreen({ initialPrinterId }: { initialPrinterId?
                               {loc.building}, к. {loc.room}
                             </Text>
                             {selectedLocation &&
-                             selectedLocation.building === loc.building &&
-                             selectedLocation.room === loc.room && (
-                              <Text style={styles.modalCheck}>✓</Text>
+                              selectedLocation.building === loc.building &&
+                              selectedLocation.room === loc.room && (
+                                <Text style={styles.modalCheck}>✓</Text>
                             )}
                           </TouchableOpacity>
                         ))
@@ -735,13 +757,18 @@ export default function PrintersScreen({ initialPrinterId }: { initialPrinterId?
           visible={showModelManager}
           transparent={true}
           animationType="slide"
+          statusBarTranslucent={true}
           onRequestClose={() => {
             Keyboard.dismiss();
             setShowModelManager(false);
             setModelManagerMode('list');
             resetModelForm();
+            ensureImmersiveMode();
           }}
-          onShow={() => Keyboard.dismiss()}
+          onShow={() => {
+            Keyboard.dismiss();
+            ensureImmersiveMode();
+          }}
         >
           <View style={styles.modalOverlay}>
             <KeyboardAvoidingView
@@ -1048,13 +1075,18 @@ export default function PrintersScreen({ initialPrinterId }: { initialPrinterId?
         visible={showModelManager}
         transparent={true}
         animationType="slide"
+        statusBarTranslucent={true}
         onRequestClose={() => {
           Keyboard.dismiss();
           setShowModelManager(false);
           setModelManagerMode('list');
           resetModelForm();
+          ensureImmersiveMode();
         }}
-        onShow={() => Keyboard.dismiss()}
+        onShow={() => {
+          Keyboard.dismiss();
+          ensureImmersiveMode();
+        }}
       >
         <View style={styles.modalOverlay}>
           <KeyboardAvoidingView
@@ -1179,7 +1211,12 @@ export default function PrintersScreen({ initialPrinterId }: { initialPrinterId?
         visible={selectedHistoryPrinter !== null}
         transparent={true}
         animationType="slide"
-        onRequestClose={() => setSelectedHistoryPrinter(null)}
+        statusBarTranslucent={true}
+        onShow={ensureImmersiveMode}
+        onRequestClose={() => {
+          setSelectedHistoryPrinter(null);
+          ensureImmersiveMode();
+        }}
       >
         <View style={styles.modalOverlay}>
           <TouchableWithoutFeedback onPress={() => setSelectedHistoryPrinter(null)}>
@@ -1355,9 +1392,12 @@ export default function PrintersScreen({ initialPrinterId }: { initialPrinterId?
         visible={showLogPartPicker}
         transparent={true}
         animationType="slide"
+        statusBarTranslucent={true}
+        onShow={ensureImmersiveMode}
         onRequestClose={() => {
           setShowLogPartPicker(false);
           setPartSearchQuery('');
+          ensureImmersiveMode();
         }}
       >
         <TouchableWithoutFeedback onPress={() => { setShowLogPartPicker(false); setPartSearchQuery(''); }}>
@@ -1447,7 +1487,12 @@ export default function PrintersScreen({ initialPrinterId }: { initialPrinterId?
         visible={showBrandPicker}
         transparent={true}
         animationType="slide"
-        onRequestClose={() => setShowBrandPicker(false)}
+        statusBarTranslucent={true}
+        onShow={ensureImmersiveMode}
+        onRequestClose={() => {
+          setShowBrandPicker(false);
+          ensureImmersiveMode();
+        }}
       >
         <TouchableWithoutFeedback onPress={() => setShowBrandPicker(false)}>
           <View style={styles.modalOverlay}>

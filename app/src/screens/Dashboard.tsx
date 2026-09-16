@@ -11,7 +11,7 @@ import Constants from 'expo-constants';
 import { Ionicons } from '@expo/vector-icons';
 import { Printer, Part } from '../models/types';
 
-const APP_VERSION = '1.0.0';
+const APP_VERSION = Constants.expoConfig?.version || '1.0.1';
 
 interface DashboardProps {
   workspaceId?: string | null;

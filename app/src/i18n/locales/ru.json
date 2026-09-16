@@ -185,7 +185,10 @@
     "totalCount": "Всего: {{count}}",
     "inArchive": "В архиве: {{count}}",
     "searchPlaceholder": "Поиск по имени, серийному номеру, MAC или IP...",
-    "noPrintersInArchive": "В архиве нет принтеров"
+    "noPrintersInArchive": "В архиве нет принтеров",
+    "networkType": "Тип сети",
+    "closedNetwork": "Закрытая сеть",
+    "openNetwork": "Открытая сеть"
   },
   "parts": {
     "title": "Комплектующие",

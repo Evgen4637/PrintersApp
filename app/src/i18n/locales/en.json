@@ -185,7 +185,10 @@
     "totalCount": "Total: {{count}}",
     "inArchive": "In archive: {{count}}",
     "searchPlaceholder": "Search by name, serial number, MAC or IP...",
-    "noPrintersInArchive": "No printers in archive"
+    "noPrintersInArchive": "No printers in archive",
+    "networkType": "Network Type",
+    "closedNetwork": "Closed Network",
+    "openNetwork": "Open Network"
   },
   "parts": {
     "title": "Parts",

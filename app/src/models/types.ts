@@ -12,6 +12,7 @@ export interface Printer {
     building: string;
     room: string;
   };
+  isClosedNetwork?: boolean;
   archived?: boolean;
   createdAt: string;
   updatedAt: string;

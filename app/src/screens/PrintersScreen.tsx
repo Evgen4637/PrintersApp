@@ -13,6 +13,7 @@ import {
   Platform,
   Keyboard,
   Dimensions,
+  Switch,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
@@ -70,6 +71,7 @@ export default function PrintersScreen({ initialPrinterId }: { initialPrinterId?
   const [macAddress, setMacAddress] = useState('');
   const [ipAddress, setIpAddress] = useState('');
   const [selectedLocation, setSelectedLocation] = useState<{building: string; room: string} | null>(null);
+  const [isClosedNetwork, setIsClosedNetwork] = useState(false);
 
   // Form state for model manager
   const [modelName, setModelName] = useState('');
@@ -201,6 +203,7 @@ export default function PrintersScreen({ initialPrinterId }: { initialPrinterId?
     setMacAddress('');
     setIpAddress('');
     setSelectedLocation(null);
+    setIsClosedNetwork(false);
     setEditingPrinter(null);
   };
 
@@ -224,6 +227,7 @@ export default function PrintersScreen({ initialPrinterId }: { initialPrinterId?
     setMacAddress(printer.macAddress || '');
     setIpAddress(printer.ipAddress || '');
     setSelectedLocation(printer.location ? { building: printer.location.building, room: printer.location.room } : null);
+    setIsClosedNetwork(!!printer.isClosedNetwork);
     setMode('edit');
   };
 
@@ -276,6 +280,7 @@ export default function PrintersScreen({ initialPrinterId }: { initialPrinterId?
         serialNumber: serialNumber.trim() || '',
         macAddress: macAddress.trim() || '',
         ipAddress: ipAddress.trim() || '',
+        isClosedNetwork,
         ...(selectedLocation ? { location: { building: selectedLocation.building, room: selectedLocation.room } } : {}),
       };
 
@@ -569,10 +574,10 @@ export default function PrintersScreen({ initialPrinterId }: { initialPrinterId?
 
             <View style={styles.formGroup}>
               <Text style={styles.label}>{t('printers.locationLabel')}</Text>
-                <TouchableOpacity
-                  style={styles.pickerButton}
-                  onPress={handleOpenLocationPicker}
-                >
+              <TouchableOpacity
+                style={styles.pickerButton}
+                onPress={handleOpenLocationPicker}
+              >
                 <Text style={styles.pickerButtonText}>
                   {selectedLocation
                     ? `${selectedLocation.building}, к. ${selectedLocation.room}`
@@ -582,6 +587,21 @@ export default function PrintersScreen({ initialPrinterId }: { initialPrinterId?
               <Text style={styles.helpText}>
                 {t('printers.locationHelp')}
               </Text>
+            </View>
+
+            <View style={[styles.formGroup, styles.switchRow]}>
+              <View style={{ flex: 1, marginRight: 12 }}>
+                <Text style={[styles.label, { marginBottom: 2 }]}>{t('printers.closedNetwork')}</Text>
+                <Text style={[styles.helpText, { marginTop: 0 }]}>
+                  {isClosedNetwork ? t('printers.closedNetwork') : t('printers.openNetwork')}
+                </Text>
+              </View>
+              <Switch
+                value={isClosedNetwork}
+                onValueChange={setIsClosedNetwork}
+                trackColor={{ false: '#e0e0e0', true: '#90CAF9' }}
+                thumbColor={isClosedNetwork ? '#1976D2' : '#f4f3f4'}
+              />
             </View>
 
             <View style={styles.buttonRow}>
@@ -947,6 +967,27 @@ export default function PrintersScreen({ initialPrinterId }: { initialPrinterId?
                   </Text>
                 </View>
               )}
+
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>{t('printers.networkType')}:</Text>
+                <View style={[
+                  styles.networkBadge,
+                  printer.isClosedNetwork ? styles.networkBadgeClosed : styles.networkBadgeOpen
+                ]}>
+                  <Ionicons
+                    name={printer.isClosedNetwork ? "lock-closed" : "globe-outline"}
+                    size={12}
+                    color={printer.isClosedNetwork ? "#1565C0" : "#2E7D32"}
+                    style={{ marginRight: 4 }}
+                  />
+                  <Text style={[
+                    styles.networkBadgeText,
+                    printer.isClosedNetwork ? styles.networkBadgeTextClosed : styles.networkBadgeTextOpen
+                  ]}>
+                    {printer.isClosedNetwork ? t('printers.closedNetwork') : t('printers.openNetwork')}
+                  </Text>
+                </View>
+              </View>
 
               <View style={styles.cardActions}>
                 <TouchableOpacity
@@ -1569,6 +1610,34 @@ const styles = StyleSheet.create({
     color: '#333',
     flex: 1,
   },
+  networkBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    alignSelf: 'flex-start',
+  },
+  networkBadgeClosed: {
+    backgroundColor: '#E3F2FD',
+    borderWidth: 1,
+    borderColor: '#90CAF9',
+  },
+  networkBadgeOpen: {
+    backgroundColor: '#E8F5E9',
+    borderWidth: 1,
+    borderColor: '#A5D6A7',
+  },
+  networkBadgeText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  networkBadgeTextClosed: {
+    color: '#1565C0',
+  },
+  networkBadgeTextOpen: {
+    color: '#2E7D32',
+  },
   cardActions: {
     flexDirection: 'row',
     marginTop: 12,
@@ -1907,6 +1976,17 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 16,
     fontWeight: '600',
+  },
+  switchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
   fab: {
     position: 'absolute',

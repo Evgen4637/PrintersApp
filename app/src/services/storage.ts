@@ -6,6 +6,7 @@ import { db } from '../firebase';
 import {
   collection,
   doc,
+  getDoc,
   getDocs,
   setDoc,
   updateDoc,
@@ -665,30 +666,57 @@ class StorageService {
       const printer = printersList.find(p => p.id === log.printerId);
       const printerName = printer ? printer.name : 'Не указан';
       
-      const logAction: DailyAction = {
-        partId: log.partId || '',
-        partName: log.partName || (log.partId ? 'Деталь' : 'без списания'),
-        quantity: log.quantityDeducted || (log.partId ? 1 : 0),
-        actionType: log.type || 'Обслуживание',
-        timestamp: log.date,
-        description: log.description,
-        printerName,
-      };
-
       const existingEntries = grouped.get(printerName) || [];
+      let entryToUse: DailyReportEntry;
       if (existingEntries.length > 0) {
-        const hasDuplicate = existingEntries.some(e =>
-          e.actions.some(a => a.timestamp === log.date || (a.description === log.description && a.partName === logAction.partName))
-        );
-        if (!hasDuplicate) {
-          existingEntries[0].actions.push(logAction);
-        }
+        entryToUse = existingEntries[0];
       } else {
-        grouped.set(printerName, [{
+        entryToUse = {
           printerId: log.printerId,
           printerName,
-          actions: [logAction],
-        }]);
+          actions: [],
+        };
+        grouped.set(printerName, [entryToUse]);
+      }
+
+      if (log.partsDeducted && log.partsDeducted.length > 0) {
+        for (const pItem of log.partsDeducted) {
+          const logAction: DailyAction = {
+            id: `${log.id}_${pItem.partId}`,
+            noteId: log.noteId,
+            partId: pItem.partId,
+            partName: pItem.partName || 'Деталь',
+            quantity: pItem.quantity || 1,
+            actionType: log.type || 'Обслуживание',
+            timestamp: log.date,
+            description: log.description,
+            printerName,
+          };
+          const hasDuplicate = entryToUse.actions.some(a =>
+            a.timestamp === log.date && (a.partId === pItem.partId || a.partName === logAction.partName)
+          );
+          if (!hasDuplicate) {
+            entryToUse.actions.push(logAction);
+          }
+        }
+      } else {
+        const logAction: DailyAction = {
+          id: log.id,
+          noteId: log.noteId,
+          partId: log.partId || '',
+          partName: log.partName || (log.partId ? 'Деталь' : 'без списания'),
+          quantity: log.quantityDeducted || (log.partId ? 1 : 0),
+          actionType: log.type || 'Обслуживание',
+          timestamp: log.date,
+          description: log.description,
+          printerName,
+        };
+        const hasDuplicate = entryToUse.actions.some(a =>
+          a.timestamp === log.date || (a.description === log.description && a.partName === logAction.partName)
+        );
+        if (!hasDuplicate) {
+          entryToUse.actions.push(logAction);
+        }
       }
     }
 
@@ -965,9 +993,27 @@ class StorageService {
           l => (l.noteId && l.noteId === noteId) || (l.description && (l.description === noteTitle || l.description.includes(noteTitle)))
         );
 
+        let partsRestocked = false;
         if (matchingLog) {
           console.log(`[storage.ts:cancelNoteCompletion] Found matching PrinterLog id=${matchingLog.id}`);
-          if (matchingLog.partId && matchingLog.quantityDeducted && matchingLog.quantityDeducted > 0) {
+          if (matchingLog.partsDeducted && matchingLog.partsDeducted.length > 0) {
+            try {
+              const partsList = await this.getParts();
+              for (const pItem of matchingLog.partsDeducted) {
+                const part = partsList.find(p => p.id === pItem.partId);
+                if (part) {
+                  const returnQty = pItem.quantity || 1;
+                  const newQty = (part.quantity || 0) + returnQty;
+                  console.log(`[storage.ts:cancelNoteCompletion] Restocking part ${part.id}: +${returnQty} -> ${newQty}`);
+                  await this._update<Part>(STORAGE_KEYS.PARTS, part.id, { quantity: newQty });
+                  part.quantity = newQty;
+                }
+              }
+              partsRestocked = true;
+            } catch (restockErr) {
+              console.warn('[storage.ts:cancelNoteCompletion] Error restocking partsDeducted from PrinterLog:', restockErr);
+            }
+          } else if (matchingLog.partId && matchingLog.quantityDeducted && matchingLog.quantityDeducted > 0) {
             try {
               const partsList = await this.getParts();
               const part = partsList.find(p => p.id === matchingLog.partId);
@@ -976,6 +1022,7 @@ class StorageService {
                 console.log(`[storage.ts:cancelNoteCompletion] Restocking part ${part.id}: +${matchingLog.quantityDeducted} -> ${restoredQty}`);
                 await this._update<Part>(STORAGE_KEYS.PARTS, part.id, { quantity: restoredQty });
               }
+              partsRestocked = true;
             } catch (restockErr) {
               console.warn('[storage.ts:cancelNoteCompletion] Error restocking part from PrinterLog:', restockErr);
             }
@@ -993,33 +1040,36 @@ class StorageService {
           let reportModified = false;
           for (let eIdx = report.entries.length - 1; eIdx >= 0; eIdx--) {
             const entry = report.entries[eIdx];
-            const aIdx = entry.actions.findIndex(
-              a => (a.noteId && a.noteId === noteId) || (a.description && (a.description === noteTitle || a.description.includes(noteTitle))) || a.actionType === noteTitle
-            );
+            for (let aIdx = entry.actions.length - 1; aIdx >= 0; aIdx--) {
+              const a = entry.actions[aIdx];
+              const isMatch =
+                (a.noteId && a.noteId === noteId) ||
+                (a.description && (a.description === noteTitle || a.description.includes(noteTitle))) ||
+                a.actionType === noteTitle;
 
-            if (aIdx !== -1) {
-              const action = entry.actions[aIdx];
-              console.log(`[storage.ts:cancelNoteCompletion] Found matching action in report ${report.id}:`, action);
-
-              if (action && action.partId && action.quantity && action.quantity > 0) {
-                try {
-                  const partsList = await this.getParts();
-                  const part = partsList.find(p => p.id === action.partId);
-                  if (part) {
-                    const restoredQty = part.quantity + action.quantity;
-                    await this._update<Part>(STORAGE_KEYS.PARTS, part.id, { quantity: restoredQty });
+              if (isMatch) {
+                console.log(`[storage.ts:cancelNoteCompletion] Found matching action in report ${report.id}:`, a);
+                if (!partsRestocked && a.partId && a.quantity && a.quantity > 0) {
+                  try {
+                    const partsList = await this.getParts();
+                    const part = partsList.find(p => p.id === a.partId);
+                    if (part) {
+                      const restoredQty = part.quantity + a.quantity;
+                      await this._update<Part>(STORAGE_KEYS.PARTS, part.id, { quantity: restoredQty });
+                      part.quantity = restoredQty;
+                    }
+                  } catch (restockErr) {
+                    console.warn('[storage.ts:cancelNoteCompletion] Error restocking part from DailyReport:', restockErr);
                   }
-                } catch (restockErr) {
-                  console.warn('[storage.ts:cancelNoteCompletion] Error restocking part:', restockErr);
                 }
+                entry.actions.splice(aIdx, 1);
+                reportModified = true;
               }
+            }
 
-              entry.actions.splice(aIdx, 1);
+            if (entry.actions.length === 0) {
+              report.entries.splice(eIdx, 1);
               reportModified = true;
-
-              if (entry.actions.length === 0) {
-                report.entries.splice(eIdx, 1);
-              }
             }
           }
 
@@ -1191,9 +1241,45 @@ class StorageService {
     });
   }
 
-  async deletePrinterLog(logId: string): Promise<boolean> {
+  async deletePrinterLog(logId: string, logData?: PrinterLog): Promise<boolean> {
     return this.enqueueWrite(async () => {
+      await assertWorkspaceReady();
       const docRef = doc(getWorkspaceCollectionRef(STORAGE_KEYS.PRINTER_LOGS), logId);
+      let targetLog = logData;
+      if (!targetLog) {
+        try {
+          const snap = await getDoc(docRef);
+          if (snap.exists()) {
+            targetLog = snap.data() as PrinterLog;
+          }
+        } catch (e) {
+          console.error('Error fetching log before deletion:', e);
+        }
+      }
+
+      if (targetLog) {
+        if (targetLog.partsDeducted && targetLog.partsDeducted.length > 0) {
+          const partsList = await this.getParts();
+          for (const pItem of targetLog.partsDeducted) {
+            const part = partsList.find(p => p.id === pItem.partId);
+            if (part) {
+              const returnQty = pItem.quantity || 1;
+              const newQty = (part.quantity || 0) + returnQty;
+              await this._update<Part>(STORAGE_KEYS.PARTS, part.id, { quantity: newQty });
+              part.quantity = newQty;
+            }
+          }
+        } else if (targetLog.partId) {
+          const returnQty = targetLog.quantityDeducted || 1;
+          const partsList = await this.getParts();
+          const part = partsList.find(p => p.id === targetLog.partId);
+          if (part) {
+            const newQty = (part.quantity || 0) + returnQty;
+            await this._update<Part>(STORAGE_KEYS.PARTS, part.id, { quantity: newQty });
+          }
+        }
+      }
+
       await deleteDoc(docRef);
       return true;
     });

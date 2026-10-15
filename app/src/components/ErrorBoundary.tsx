@@ -1,5 +1,6 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, Platform } from 'react-native';
+import i18n from '../i18n';
 
 interface Props {
   children: ReactNode;
@@ -34,9 +35,9 @@ export class ErrorBoundary extends Component<Props, State> {
         <SafeAreaView style={styles.container}>
           <View style={styles.content}>
             <Text style={styles.icon}>⚠️</Text>
-            <Text style={styles.title}>Что-то пошло не так</Text>
+            <Text style={styles.title}>{i18n.t('errorBoundary.title')}</Text>
             <Text style={styles.subtitle}>
-              Произошла непредвиденная ошибка при отображении интерфейса.
+              {i18n.t('errorBoundary.subtitle')}
             </Text>
 
             {this.state.error?.message ? (
@@ -48,7 +49,7 @@ export class ErrorBoundary extends Component<Props, State> {
             ) : null}
 
             <TouchableOpacity style={styles.button} onPress={this.handleRestart}>
-              <Text style={styles.buttonText}>🔄 Перезапустить</Text>
+              <Text style={styles.buttonText}>{i18n.t('errorBoundary.restart')}</Text>
             </TouchableOpacity>
           </View>
         </SafeAreaView>

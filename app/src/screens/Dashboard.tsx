@@ -259,7 +259,7 @@ export default function DashboardScreen({ workspaceId, onLeaveWorkspace, onNavig
               <View>
                 <Text style={styles.widgetItemName}>{printer.name}</Text>
                 <Text style={styles.widgetItemDesc}>
-                  {printer.location ? `${printer.location.building}, к. ${printer.location.room}` : t('dashboard.noLocation')}
+                  {printer.location ? `${printer.location.building}, ${printer.location.room}` : t('dashboard.noLocation')}
                 </Text>
               </View>
               <Text style={styles.widgetItemDetails}>{t('dashboard.details')}</Text>

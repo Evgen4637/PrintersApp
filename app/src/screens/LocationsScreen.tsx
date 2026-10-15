@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  FlatList,
+  SectionList,
   TouchableOpacity,
   Alert,
   Modal,
@@ -27,6 +27,7 @@ export default function LocationsScreen() {
   const [mode, setMode] = useState<ScreenMode>('list');
   const [editingLocation, setEditingLocation] = useState<LocationItem | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [expandedBuildings, setExpandedBuildings] = useState<Record<string, boolean>>({});
 
   // Form state
   const [building, setBuilding] = useState('');
@@ -199,6 +200,43 @@ export default function LocationsScreen() {
     location.room.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  const toggleBuilding = (buildingKey: string) => {
+    setExpandedBuildings(prev => ({
+      ...prev,
+      [buildingKey]: !prev[buildingKey],
+    }));
+  };
+
+  const sections = useMemo(() => {
+    const isSearching = searchQuery.trim().length > 0;
+    const map = new Map<string, LocationItem[]>();
+    for (const loc of filteredLocations) {
+      const b = loc.building?.trim() || '';
+      if (!map.has(b)) {
+        map.set(b, []);
+      }
+      map.get(b)!.push(loc);
+    }
+
+    const entries = Array.from(map.entries()).sort(([a], [b]) => {
+      if (!a) return 1;
+      if (!b) return -1;
+      return a.localeCompare(b, 'ru');
+    });
+
+    return entries.map(([building, data]) => {
+      const isExpanded = isSearching || !!expandedBuildings[building];
+      return {
+        building,
+        data: isExpanded
+          ? data.sort((a, b) => a.room.localeCompare(b.room, undefined, { numeric: true }))
+          : [],
+        totalCount: data.length,
+        isExpanded,
+      };
+    });
+  }, [filteredLocations, searchQuery, expandedBuildings]);
+
   if (loading) {
     return (
       <View style={styles.container}>
@@ -303,12 +341,40 @@ export default function LocationsScreen() {
           )}
         </View>
       ) : (
-        <FlatList
-          data={filteredLocations}
-          renderItem={({item}) => (
+        <SectionList
+          sections={sections}
+          keyExtractor={item => item.id}
+          contentContainerStyle={[styles.list, { paddingBottom: Math.max(insets.bottom, 20) + 70 }]}
+          stickySectionHeadersEnabled={false}
+          renderSectionHeader={({ section }) => (
+            <TouchableOpacity
+              style={styles.sectionHeader}
+              onPress={() => toggleBuilding(section.building)}
+              activeOpacity={0.7}
+            >
+              <View style={styles.sectionTitleRow}>
+                <Ionicons name="business-outline" size={16} color="#007AFF" style={{ marginRight: 6 }} />
+                <Text style={styles.sectionHeaderText}>
+                  {section.building ? section.building : t('locations.noBuilding')}
+                </Text>
+              </View>
+              <View style={styles.sectionRightRow}>
+                <View style={styles.sectionBadge}>
+                  <Text style={styles.sectionBadgeText}>{section.totalCount}</Text>
+                </View>
+                <Ionicons
+                  name={section.isExpanded ? 'chevron-up' : 'chevron-down'}
+                  size={18}
+                  color="#666"
+                  style={{ marginLeft: 6 }}
+                />
+              </View>
+            </TouchableOpacity>
+          )}
+          renderItem={({ item }) => (
             <View style={styles.locationCard}>
               <View style={styles.locationInfo}>
-                <Text style={styles.locationName}>{item.building}, {item.room}</Text>
+                <Text style={styles.locationName}>{item.room}</Text>
               </View>
               <View style={styles.cardActions}>
                 <TouchableOpacity
@@ -326,8 +392,6 @@ export default function LocationsScreen() {
               </View>
             </View>
           )}
-          keyExtractor={item => item.id}
-          contentContainerStyle={styles.list}
         />
       )}
 
@@ -385,6 +449,41 @@ const styles = StyleSheet.create({
   },
   list: {
     padding: 15,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#e9ecef',
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    marginTop: 14,
+    marginBottom: 8,
+  },
+  sectionTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  sectionRightRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  sectionHeaderText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#333',
+  },
+  sectionBadge: {
+    backgroundColor: 'white',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  sectionBadgeText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#007AFF',
   },
   locationCard: {
     backgroundColor: 'white',

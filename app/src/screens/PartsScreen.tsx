@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -17,6 +17,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import storage from '../services/storage';
 import { Ionicons } from '@expo/vector-icons';
+import { ensureImmersiveMode } from '../utils/useImmersiveMode';
 import { Part, PrinterModel, InventoryLocation, BrandItem } from '../models/types';
 import BrandSelector from '../components/BrandSelector';
 
@@ -46,6 +47,7 @@ export default function PartsScreen({ initialPartId }: { initialPartId?: string 
   const [selectedLocation, setSelectedLocation] = useState<{building: string; room: string} | null>(null);
   const [selectedModelIds, setSelectedModelIds] = useState<string[]>([]);
   const [showLocationPicker, setShowLocationPicker] = useState(false);
+  const [expandedBuildingsInModal, setExpandedBuildingsInModal] = useState<Record<string, boolean>>({});
   const [showModelPicker, setShowModelPicker] = useState(false);
 
   useEffect(() => {
@@ -81,13 +83,35 @@ export default function PartsScreen({ initialPartId }: { initialPartId?: string 
     }
   };
 
+  const groupedLocations = useMemo(() => {
+    const map = new Map<string, Array<{ building: string; room: string }>>();
+    for (const loc of locations) {
+      const b = loc.building?.trim() || '';
+      if (!map.has(b)) {
+        map.set(b, []);
+      }
+      map.get(b)!.push(loc);
+    }
+
+    const entries = Array.from(map.entries()).sort(([a], [b]) => {
+      if (!a) return 1;
+      if (!b) return -1;
+      return a.localeCompare(b, 'ru');
+    });
+
+    return entries.map(([building, items]) => ({
+      building,
+      items: items.sort((a, b) => a.room.localeCompare(b.room, undefined, { numeric: true })),
+    }));
+  }, [locations]);
+
   const getAvailableBrands = () => {
     return Array.from(new Set(dbBrands.map(b => b.name))).sort((a, b) => a.localeCompare(b));
   };
 
   const getFilterBrandList = () => {
     const available = getAvailableBrands();
-    return ['Все', ...available];
+    return [t('common.all'), ...available];
   };
 
   const handleSelectBrand = (brand: string) => {
@@ -98,7 +122,7 @@ export default function PartsScreen({ initialPartId }: { initialPartId?: string 
   const handleCreateNewBrand = async () => {
     const trimmed = newBrandInput.trim();
     if (!trimmed) {
-      Alert.alert('Ошибка', 'Введите название бренда');
+      Alert.alert(t('common.error'), t('parts.enterBrandNameError'));
       return;
     }
     const created = await storage.addBrand(trimmed);
@@ -115,12 +139,12 @@ export default function PartsScreen({ initialPartId }: { initialPartId?: string 
 
   const handleDeleteBrand = (brandName: string) => {
     Alert.alert(
-      'Удалить бренд?',
-      `Вы уверены, что хотите удалить бренд "${brandName}"?`,
+      t('brandSelector.deleteTitle'),
+      t('brandSelector.deleteConfirm', { brand: brandName }),
       [
-        { text: 'Отмена', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Да',
+          text: t('common.yes'),
           style: 'destructive',
           onPress: async () => {
             // Мгновенное обновление локального стейта
@@ -129,7 +153,7 @@ export default function PartsScreen({ initialPartId }: { initialPartId?: string 
               setSelectedBrand('');
             }
             if (selectedFilterBrand.toLowerCase() === brandName.toLowerCase()) {
-              setSelectedFilterBrand('Все');
+              setSelectedFilterBrand(t('common.all'));
             }
             await storage.deleteBrand(brandName);
             const updatedBrands = await storage.getBrands();
@@ -207,7 +231,7 @@ export default function PartsScreen({ initialPartId }: { initialPartId?: string 
               await loadData();
             } catch (error) {
               console.error('Ошибка удаления детали:', error);
-              Alert.alert(t('common.error'), 'Не удалось удалить деталь');
+              Alert.alert(t('common.error'), t('parts.deletePartError'));
             }
           },
         },
@@ -229,29 +253,29 @@ export default function PartsScreen({ initialPartId }: { initialPartId?: string 
     console.log('Form values:', { selectedBrand, partNumber, description, quantity, selectedLocation, selectedModelIds });
     
     if (!selectedBrand.trim()) {
-      Alert.alert('Ошибка', 'Пожалуйста, выберите Бренд');
+      Alert.alert(t('common.error'), t('parts.selectBrandError'));
       console.log('Validation failed: selectedBrand empty');
       return;
     }
     if (!partNumber.trim()) {
-      Alert.alert('Ошибка', 'Введите парт-номер');
+      Alert.alert(t('common.error'), t('parts.enterPartNumberError'));
       console.log('Validation failed: partNumber empty');
       return;
     }
     if (!description.trim()) {
-      Alert.alert('Ошибка', 'Введите наименование');
+      Alert.alert(t('common.error'), t('parts.enterNameError'));
       console.log('Validation failed: description empty');
       return;
     }
     if (selectedModelIds.length === 0) {
-      Alert.alert('Ошибка', 'Выберите хотя бы одну совместимую модель');
+      Alert.alert(t('common.error'), t('parts.selectCompatibleModelError'));
       console.log('Validation failed: no models selected');
       return;
     }
 
     const qty = parseInt(quantity, 10);
     if (isNaN(qty) || qty < 0) {
-      Alert.alert('Ошибка', 'Введите корректное количество');
+      Alert.alert(t('common.error'), t('parts.enterValidQuantityError'));
       console.log('Validation failed: invalid quantity');
       return;
     }
@@ -279,10 +303,10 @@ export default function PartsScreen({ initialPartId }: { initialPartId?: string 
       await loadData();
       setMode('list');
       resetForm();
-      Alert.alert('Успех', 'Деталь сохранена');
+      Alert.alert(t('common.success'), t('parts.partSavedSuccess'));
     } catch (error) {
       console.error('Save failed:', error);
-      Alert.alert('Ошибка', 'Не удалось сохранить деталь: ' + (error instanceof Error ? error.message : String(error)));
+      Alert.alert(t('common.error'), t('parts.savePartError') + ': ' + (error instanceof Error ? error.message : String(error)));
     }
   };
 
@@ -295,9 +319,16 @@ export default function PartsScreen({ initialPartId }: { initialPartId?: string 
     return modelIds.map(id => models.find(m => m.id === id)?.name || id).join(', ');
   };
 
+  const toggleBuildingInModal = (buildingKey: string) => {
+    setExpandedBuildingsInModal(prev => ({
+      ...prev,
+      [buildingKey]: !prev[buildingKey],
+    }));
+  };
+
   const getLocationName = (location: {building: string; room: string} | undefined) => {
-    if (!location) return 'Не указано';
-    return `${location.building}, к. ${location.room}`;
+    if (!location) return t('common.notSpecified');
+    return `${location.building}, ${location.room}`;
   };
 
   const filteredParts = parts.filter(part => {
@@ -305,15 +336,16 @@ export default function PartsScreen({ initialPartId }: { initialPartId?: string 
       part.partNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
       part.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (part.brand && part.brand.toLowerCase().includes(searchQuery.toLowerCase()));
+    const isAllBrand = selectedFilterBrand === 'Все' || selectedFilterBrand === t('common.all');
     const matchesBrand =
-      selectedFilterBrand === 'Все' ||
+      isAllBrand ||
       (part.brand && part.brand.toLowerCase() === selectedFilterBrand.toLowerCase());
     return matchesSearch && matchesBrand;
   });
   if (loading) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
-        <Text>Загрузка...</Text>
+        <Text>{t('common.loading')}</Text>
       </View>
     );
   }
@@ -402,7 +434,7 @@ export default function PartsScreen({ initialPartId }: { initialPartId?: string 
               >
                 <Text style={styles.pickerButtonText}>
                   {selectedLocation
-                    ? `${selectedLocation.building}, к. ${selectedLocation.room}`
+                    ? `${selectedLocation.building}, ${selectedLocation.room}`
                     : t('printers.selectRoom')}
                 </Text>
               </TouchableOpacity>
@@ -447,44 +479,76 @@ export default function PartsScreen({ initialPartId }: { initialPartId?: string 
           visible={showLocationPicker}
           transparent={true}
           animationType="slide"
-          onRequestClose={() => setShowLocationPicker(false)}
+          statusBarTranslucent={true}
+          onShow={ensureImmersiveMode}
+          onRequestClose={() => {
+            setShowLocationPicker(false);
+            ensureImmersiveMode();
+          }}
           hardwareAccelerated={true}
         >
           <TouchableWithoutFeedback onPress={() => setShowLocationPicker(false)}>
             <View style={styles.modalOverlay}>
               <TouchableWithoutFeedback onPress={() => {}}>
                 <View style={styles.modalContent}>
-                  <Text style={styles.modalTitle}>Выберите помещение</Text>
+                  <Text style={styles.modalTitle}>{t('parts.selectLocationModalTitle')}</Text>
                   <ScrollView style={{ maxHeight: 300 }}>
                     {locations.length === 0 ? (
-                      <Text style={styles.modalEmptyText}>Нет доступных помещений</Text>
+                      <Text style={styles.modalEmptyText}>{t('parts.noLocationsAvailable')}</Text>
                     ) : (
-                      locations.map(loc => (
-                        <TouchableOpacity
-                          key={`${loc.building}-${loc.room}`}
-                          style={styles.modalItem}
-                          onPress={() => {
-                            setSelectedLocation(loc);
-                            setShowLocationPicker(false);
-                          }}
-                        >
-                          <Text style={styles.modalItemText}>
-                            {loc.building}, к. {loc.room}
-                          </Text>
-                          {selectedLocation && 
-                           selectedLocation.building === loc.building && 
-                           selectedLocation.room === loc.room && (
-                            <Text style={styles.modalCheck}>✓</Text>
-                          )}
-                        </TouchableOpacity>
+                      groupedLocations.map(group => (
+                        <View key={group.building || 'no-building'} style={styles.locationGroup}>
+                          <TouchableOpacity
+                            style={styles.locationGroupHeader}
+                            onPress={() => toggleBuildingInModal(group.building)}
+                            activeOpacity={0.7}
+                          >
+                            <Text style={styles.locationGroupTitle}>
+                              🏢 {group.building ? group.building : t('parts.noBuilding')}
+                            </Text>
+                            <View style={styles.sectionRightRow}>
+                              <View style={styles.locationGroupBadge}>
+                                <Text style={styles.locationGroupBadgeText}>{group.items.length}</Text>
+                              </View>
+                              <Ionicons
+                                name={expandedBuildingsInModal[group.building] ? 'chevron-up' : 'chevron-down'}
+                                size={18}
+                                color="#666"
+                                style={{ marginLeft: 6 }}
+                              />
+                            </View>
+                          </TouchableOpacity>
+                          {expandedBuildingsInModal[group.building] &&
+                            group.items.map(loc => (
+                              <TouchableOpacity
+                                key={`${loc.building}-${loc.room}`}
+                                style={styles.modalItem}
+                                onPress={() => {
+                                  setSelectedLocation(loc);
+                                  setShowLocationPicker(false);
+                                  ensureImmersiveMode();
+                                }}
+                              >
+                                <Text style={styles.modalItemText}>{loc.room}</Text>
+                                {selectedLocation && 
+                                 selectedLocation.building === loc.building && 
+                                 selectedLocation.room === loc.room && (
+                                  <Text style={styles.modalCheck}>✓</Text>
+                                )}
+                              </TouchableOpacity>
+                            ))}
+                        </View>
                       ))
                     )}
                   </ScrollView>
                   <TouchableOpacity
                     style={[styles.modalCancelButton, { paddingBottom: Math.max(insets.bottom, 16) }]}
-                    onPress={() => setShowLocationPicker(false)}
+                    onPress={() => {
+                      setShowLocationPicker(false);
+                      ensureImmersiveMode();
+                    }}
                   >
-                    <Text style={styles.modalCancelText}>Отмена</Text>
+                    <Text style={styles.modalCancelText}>{t('common.cancel')}</Text>
                   </TouchableOpacity>
                 </View>
               </TouchableWithoutFeedback>
@@ -497,7 +561,12 @@ export default function PartsScreen({ initialPartId }: { initialPartId?: string 
           visible={showModelPicker}
           transparent={true}
           animationType="slide"
-          onRequestClose={() => setShowModelPicker(false)}
+          statusBarTranslucent={true}
+          onShow={ensureImmersiveMode}
+          onRequestClose={() => {
+            setShowModelPicker(false);
+            ensureImmersiveMode();
+          }}
           hardwareAccelerated={true}
         >
           <TouchableWithoutFeedback onPress={() => setShowModelPicker(false)}>
@@ -506,15 +575,15 @@ export default function PartsScreen({ initialPartId }: { initialPartId?: string 
                 <View style={styles.modalContent}>
                   <Text style={styles.modalTitle}>
                     {selectedBrand
-                      ? `Выберите модели (${selectedBrand})`
-                      : 'Выберите совместимые модели'}
+                      ? t('parts.selectCompatibleModelsTitle', { brand: selectedBrand })
+                      : t('parts.selectCompatibleModelsDefault')}
                   </Text>
                   <ScrollView style={{ maxHeight: 300 }}>
                     {(() => {
                       if (!selectedBrand) {
                         return (
                           <Text style={styles.modalEmptyText}>
-                            Пожалуйста, сначала выберите бренд в форме.
+                            {t('parts.selectBrandFirstHelp')}
                           </Text>
                         );
                       }
@@ -531,7 +600,7 @@ export default function PartsScreen({ initialPartId }: { initialPartId?: string 
                       if (filteredModels.length === 0) {
                         return (
                           <Text style={styles.modalEmptyText}>
-                            {`Нет доступных моделей для бренда "${selectedBrand}"`}
+                            {t('parts.noModelsForBrand', { brand: selectedBrand })}
                           </Text>
                         );
                       }
@@ -554,7 +623,7 @@ export default function PartsScreen({ initialPartId }: { initialPartId?: string 
                     style={[styles.modalCancelButton, { paddingBottom: Math.max(insets.bottom, 16) }]}
                     onPress={() => setShowModelPicker(false)}
                   >
-                    <Text style={styles.modalCancelText}>Готово</Text>
+                    <Text style={styles.modalCancelText}>{t('common.done')}</Text>
                   </TouchableOpacity>
                 </View>
               </TouchableWithoutFeedback>
@@ -605,7 +674,7 @@ export default function PartsScreen({ initialPartId }: { initialPartId?: string 
       <View style={styles.brandFilterContainer}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.brandChipsScroll}>
           {getFilterBrandList().map(brandName => {
-            const isSelected = selectedFilterBrand === brandName;
+            const isSelected = selectedFilterBrand === brandName || (brandName === t('common.all') && (selectedFilterBrand === 'Все' || selectedFilterBrand === t('common.all')));
             return (
               <TouchableOpacity
                 key={brandName}
@@ -619,7 +688,7 @@ export default function PartsScreen({ initialPartId }: { initialPartId?: string 
                   styles.brandFilterChipText,
                   isSelected && styles.brandFilterChipTextSelected
                 ]}>
-                  {brandName === 'Все' ? t('common.all') : brandName}
+                  {brandName}
                 </Text>
               </TouchableOpacity>
             );
@@ -702,44 +771,76 @@ export default function PartsScreen({ initialPartId }: { initialPartId?: string 
         visible={showLocationPicker}
         transparent={true}
         animationType="slide"
-        onRequestClose={() => setShowLocationPicker(false)}
+        statusBarTranslucent={true}
+        onShow={ensureImmersiveMode}
+        onRequestClose={() => {
+          setShowLocationPicker(false);
+          ensureImmersiveMode();
+        }}
         hardwareAccelerated={true}
       >
         <TouchableWithoutFeedback onPress={() => setShowLocationPicker(false)}>
           <View style={styles.modalOverlay}>
             <TouchableWithoutFeedback onPress={() => {}}>
               <View style={styles.modalContent}>
-                <Text style={styles.modalTitle}>Выберите помещение</Text>
+                <Text style={styles.modalTitle}>{t('parts.selectLocationModalTitle')}</Text>
                 <ScrollView style={{ maxHeight: 300 }}>
                   {locations.length === 0 ? (
-                    <Text style={styles.modalEmptyText}>Нет доступных помещений</Text>
+                    <Text style={styles.modalEmptyText}>{t('parts.noLocationsAvailable')}</Text>
                   ) : (
-                    locations.map(loc => (
-                      <TouchableOpacity
-                        key={`${loc.building}-${loc.room}`}
-                        style={styles.modalItem}
-                        onPress={() => {
-                          setSelectedLocation(loc);
-                          setShowLocationPicker(false);
-                        }}
-                      >
-                        <Text style={styles.modalItemText}>
-                          {loc.building}, к. {loc.room}
-                        </Text>
-                        {selectedLocation && 
-                         selectedLocation.building === loc.building && 
-                         selectedLocation.room === loc.room && (
-                          <Text style={styles.modalCheck}>✓</Text>
-                        )}
-                      </TouchableOpacity>
+                    groupedLocations.map(group => (
+                      <View key={group.building || 'no-building'} style={styles.locationGroup}>
+                        <TouchableOpacity
+                          style={styles.locationGroupHeader}
+                          onPress={() => toggleBuildingInModal(group.building)}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={styles.locationGroupTitle}>
+                            🏢 {group.building ? group.building : t('parts.noBuilding')}
+                          </Text>
+                          <View style={styles.sectionRightRow}>
+                            <View style={styles.locationGroupBadge}>
+                              <Text style={styles.locationGroupBadgeText}>{group.items.length}</Text>
+                            </View>
+                            <Ionicons
+                              name={expandedBuildingsInModal[group.building] ? 'chevron-up' : 'chevron-down'}
+                              size={18}
+                              color="#666"
+                              style={{ marginLeft: 6 }}
+                            />
+                          </View>
+                        </TouchableOpacity>
+                        {expandedBuildingsInModal[group.building] &&
+                          group.items.map(loc => (
+                            <TouchableOpacity
+                              key={`${loc.building}-${loc.room}`}
+                              style={styles.modalItem}
+                              onPress={() => {
+                                setSelectedLocation(loc);
+                                setShowLocationPicker(false);
+                                ensureImmersiveMode();
+                              }}
+                            >
+                              <Text style={styles.modalItemText}>{loc.room}</Text>
+                              {selectedLocation && 
+                               selectedLocation.building === loc.building && 
+                               selectedLocation.room === loc.room && (
+                                <Text style={styles.modalCheck}>✓</Text>
+                              )}
+                            </TouchableOpacity>
+                          ))}
+                      </View>
                     ))
                   )}
                 </ScrollView>
                 <TouchableOpacity
                   style={[styles.modalCancelButton, { paddingBottom: Math.max(insets.bottom, 16) }]}
-                  onPress={() => setShowLocationPicker(false)}
+                  onPress={() => {
+                    setShowLocationPicker(false);
+                    ensureImmersiveMode();
+                  }}
                 >
-                  <Text style={styles.modalCancelText}>Отмена</Text>
+                  <Text style={styles.modalCancelText}>{t('common.cancel')}</Text>
                 </TouchableOpacity>
               </View>
             </TouchableWithoutFeedback>
@@ -752,7 +853,12 @@ export default function PartsScreen({ initialPartId }: { initialPartId?: string 
         visible={showModelPicker}
         transparent={true}
         animationType="slide"
-        onRequestClose={() => setShowModelPicker(false)}
+        statusBarTranslucent={true}
+        onShow={ensureImmersiveMode}
+        onRequestClose={() => {
+          setShowModelPicker(false);
+          ensureImmersiveMode();
+        }}
         hardwareAccelerated={true}
       >
         <TouchableWithoutFeedback onPress={() => setShowModelPicker(false)}>
@@ -761,15 +867,15 @@ export default function PartsScreen({ initialPartId }: { initialPartId?: string 
               <View style={styles.modalContent}>
                 <Text style={styles.modalTitle}>
                   {selectedBrand
-                    ? `Выберите модели (${selectedBrand})`
-                    : 'Выберите совместимые модели'}
+                    ? t('parts.selectCompatibleModelsTitle', { brand: selectedBrand })
+                    : t('parts.selectCompatibleModelsDefault')}
                 </Text>
                 <ScrollView style={{ maxHeight: 300 }}>
                   {(() => {
                     if (!selectedBrand) {
                       return (
                         <Text style={styles.modalEmptyText}>
-                          Пожалуйста, сначала выберите бренд в форме.
+                          {t('parts.selectBrandFirstHelp')}
                         </Text>
                       );
                     }
@@ -786,7 +892,7 @@ export default function PartsScreen({ initialPartId }: { initialPartId?: string 
                     if (filteredModels.length === 0) {
                       return (
                         <Text style={styles.modalEmptyText}>
-                          {`Нет доступных моделей для бренда "${selectedBrand}"`}
+                          {t('parts.noModelsForBrand', { brand: selectedBrand })}
                         </Text>
                       );
                     }
@@ -809,7 +915,7 @@ export default function PartsScreen({ initialPartId }: { initialPartId?: string 
                   style={[styles.modalCancelButton, { paddingBottom: Math.max(insets.bottom, 16) }]}
                   onPress={() => setShowModelPicker(false)}
                 >
-                  <Text style={styles.modalCancelText}>Готово</Text>
+                  <Text style={styles.modalCancelText}>{t('common.done')}</Text>
                 </TouchableOpacity>
               </View>
             </TouchableWithoutFeedback>
@@ -1098,6 +1204,41 @@ const styles = StyleSheet.create({
     color: '#999',
     textAlign: 'center',
     marginBottom: 15,
+  },
+  locationGroup: {
+    marginBottom: 8,
+  },
+  locationGroupHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F1F3F5',
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: '#E9ECEF',
+  },
+  sectionRightRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  locationGroupTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#495057',
+    letterSpacing: 0.3,
+  },
+  locationGroupBadge: {
+    backgroundColor: '#E2E6EA',
+    borderRadius: 10,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+  },
+  locationGroupBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#6C757D',
   },
   modalItem: {
     flexDirection: 'row',

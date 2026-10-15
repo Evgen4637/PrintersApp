@@ -18,7 +18,7 @@ import { DailyReportEntry, DailyAction, ReportsHistory } from '../models/types';
 type TabType = 'current' | 'history';
 
 export default function DailyReportScreen() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const insets = useSafeAreaInsets();
   const todayStr = new Date().toISOString().split('T')[0];
   const [activeTab, setActiveTab] = useState<TabType>('current');
@@ -102,6 +102,7 @@ export default function DailyReportScreen() {
 
       let rowsHtml = '';
       let totalActionsCount = 0;
+      const locale = i18n.language === 'en' ? 'en-US' : 'ru-RU';
 
       currentReport.forEach((entries, printerName) => {
         const printer = allPrinters.find(p => p.name.toLowerCase() === printerName.toLowerCase());
@@ -116,10 +117,10 @@ export default function DailyReportScreen() {
               action.description.trim() &&
               action.description !== 'Обслуживание'
             );
-            const titleText = isTaskEntry ? action.description!.trim() : 'Обслуживание';
+            const titleText = isTaskEntry ? action.description!.trim() : t('dailyReport.maintenanceAction');
             const isWriteOff = action.quantity > 0 && action.partName && action.partName !== 'без списания';
             const formattedDateStr = action.timestamp
-              ? new Date(action.timestamp).toLocaleDateString('ru-RU', {
+              ? new Date(action.timestamp).toLocaleDateString(locale, {
                   day: '2-digit',
                   month: '2-digit',
                   year: 'numeric',
@@ -134,7 +135,7 @@ export default function DailyReportScreen() {
                 <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold;">${printerName}</td>
                 <td style="padding: 8px; border: 1px solid #ddd;">${modelName}</td>
                 <td style="padding: 8px; border: 1px solid #ddd; color: #D97706; font-weight: bold;">${titleText}</td>
-                <td style="padding: 8px; border: 1px solid #ddd;">${isWriteOff ? `${action.partName} (x${action.quantity})` : 'без списания'}</td>
+                <td style="padding: 8px; border: 1px solid #ddd;">${isWriteOff ? `${action.partName} (x${action.quantity})` : t('dailyReport.noWriteOff')}</td>
               </tr>
             `;
           });
@@ -146,7 +147,7 @@ export default function DailyReportScreen() {
         <html>
           <head>
             <meta charset="utf-8" />
-            <title>Отчет по обслуживанию техники</title>
+            <title>${t('dailyReport.pdfTitle')}</title>
             <style>
               body { font-family: Arial, sans-serif; padding: 20px; color: #333; }
               h1 { color: #007AFF; font-size: 22px; margin-bottom: 5px; }
@@ -159,19 +160,19 @@ export default function DailyReportScreen() {
             </style>
           </head>
           <body>
-            <h1>Отчет по обслуживанию техники</h1>
+            <h1>${t('dailyReport.pdfTitle')}</h1>
             <div class="period">
-              <strong>Период:</strong> с ${startDate} по ${endDate} | 
-              <strong>Всего записей:</strong> ${totalActionsCount}
+              <strong>${t('dailyReport.periodLabel')}</strong> ${t('dailyReport.fromPeriod')} ${startDate} ${t('dailyReport.toPeriod')} ${endDate} | 
+              <strong>${t('dailyReport.totalRecordsLabel')}</strong> ${totalActionsCount}
             </div>
             <table>
               <thead>
                 <tr>
-                  <th>Дата / Время</th>
-                  <th>Имя принтера</th>
-                  <th>Модель</th>
-                  <th>Выполненные работы</th>
-                  <th>Детали / Списание</th>
+                  <th>${t('dailyReport.colDateTime')}</th>
+                  <th>${t('dailyReport.colPrinterName')}</th>
+                  <th>${t('dailyReport.colModel')}</th>
+                  <th>${t('dailyReport.colActions')}</th>
+                  <th>${t('dailyReport.colParts')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -179,7 +180,7 @@ export default function DailyReportScreen() {
               </tbody>
             </table>
             <div class="footer">
-              Сформировано: ${new Date().toLocaleString('ru-RU')}
+              ${t('dailyReport.generatedAt')} ${new Date().toLocaleString(locale)}
             </div>
           </body>
         </html>
@@ -189,7 +190,7 @@ export default function DailyReportScreen() {
       if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(uri, {
           mimeType: 'application/pdf',
-          dialogTitle: 'Экспорт отчета в PDF',
+          dialogTitle: t('dailyReport.pdfDialogTitle'),
           UTI: 'com.adobe.pdf',
         });
       } else {
@@ -247,7 +248,7 @@ export default function DailyReportScreen() {
               console.log('[DailyReportScreen] Daily action deleted successfully!');
             } catch (error: any) {
               console.error('[DailyReportScreen] Ошибка удаления записи:', error);
-              Alert.alert(t('common.error'), error?.message || 'Не удалось удалить запись');
+              Alert.alert(t('common.error'), error?.message || t('dailyReport.deleteLogError'));
             }
           },
         },

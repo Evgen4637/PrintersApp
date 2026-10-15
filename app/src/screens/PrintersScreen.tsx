@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -19,7 +19,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import storage from '../services/storage';
 import { Ionicons } from '@expo/vector-icons';
-import * as NavigationBar from 'expo-navigation-bar';
+import { ensureImmersiveMode } from '../utils/useImmersiveMode';
 import { Printer, PrinterModel, PrinterLog, Part, BrandItem } from '../models/types';
 import BrandSelector from '../components/BrandSelector';
 
@@ -27,15 +27,9 @@ type ScreenMode = 'list' | 'add' | 'edit';
 type ModelManagerMode = 'list' | 'add' | 'edit';
 
 export default function PrintersScreen({ initialPrinterId }: { initialPrinterId?: string }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const insets = useSafeAreaInsets();
 
-  const ensureImmersiveMode = () => {
-    if (Platform.OS === 'android') {
-      NavigationBar.setVisibilityAsync('hidden');
-      NavigationBar.setBehaviorAsync('overlay-swipe');
-    }
-  };
   const [printers, setPrinters] = useState<Printer[]>([]);
   const [archivedPrinters, setArchivedPrinters] = useState<Printer[]>([]);
   const [isArchiveMode, setIsArchiveMode] = useState<boolean>(false);
@@ -47,6 +41,7 @@ export default function PrintersScreen({ initialPrinterId }: { initialPrinterId?
   const [editingPrinter, setEditingPrinter] = useState<Printer | null>(null);
   const [showModelPicker, setShowModelPicker] = useState(false);
   const [showLocationPicker, setShowLocationPicker] = useState(false);
+  const [expandedBuildingsInModal, setExpandedBuildingsInModal] = useState<Record<string, boolean>>({});
   const [showBrandPicker, setShowBrandPicker] = useState(false);
   const [showModelManager, setShowModelManager] = useState(false);
   const [modelManagerMode, setModelManagerMode] = useState<ModelManagerMode>('list');
@@ -254,7 +249,7 @@ export default function PrintersScreen({ initialPrinterId }: { initialPrinterId?
               await loadData();
             } catch (error) {
               console.error('Ошибка удаления принтера:', error);
-              Alert.alert(t('common.error'), 'Не удалось удалить принтер');
+              Alert.alert(t('common.error'), t('printers.deletePrinterError'));
             }
           },
         },
@@ -264,15 +259,15 @@ export default function PrintersScreen({ initialPrinterId }: { initialPrinterId?
 
   const handleSavePrinter = async () => {
     if (!name.trim()) {
-      Alert.alert('Ошибка', 'Введите имя принтера');
+      Alert.alert(t('common.error'), t('printers.enterPrinterNameError'));
       return;
     }
     if (!selectedBrand) {
-      Alert.alert('Ошибка', 'Выберите бренд принтера');
+      Alert.alert(t('common.error'), t('printers.selectBrandError'));
       return;
     }
     if (!selectedModelId) {
-      Alert.alert('Ошибка', 'Выберите модель принтера');
+      Alert.alert(t('common.error'), t('printers.selectModelError'));
       return;
     }
 
@@ -303,7 +298,7 @@ export default function PrintersScreen({ initialPrinterId }: { initialPrinterId?
       resetPrinterForm();
     } catch (error) {
       console.error('Ошибка сохранения принтера:', error);
-      Alert.alert('Ошибка', 'Не удалось сохранить принтер');
+      Alert.alert(t('common.error'), t('printers.savePrinterError'));
     }
   };
 
@@ -330,7 +325,37 @@ export default function PrintersScreen({ initialPrinterId }: { initialPrinterId?
   const handleCloseLocationPicker = () => {
     Keyboard.dismiss();
     setShowLocationPicker(false);
+    ensureImmersiveMode();
   };
+
+  const toggleBuildingInModal = (buildingKey: string) => {
+    setExpandedBuildingsInModal(prev => ({
+      ...prev,
+      [buildingKey]: !prev[buildingKey],
+    }));
+  };
+
+  const groupedLocations = useMemo(() => {
+    const map = new Map<string, Array<{ building: string; room: string }>>();
+    for (const loc of locations) {
+      const b = loc.building?.trim() || '';
+      if (!map.has(b)) {
+        map.set(b, []);
+      }
+      map.get(b)!.push(loc);
+    }
+
+    const entries = Array.from(map.entries()).sort(([a], [b]) => {
+      if (!a) return 1;
+      if (!b) return -1;
+      return a.localeCompare(b, 'ru');
+    });
+
+    return entries.map(([building, items]) => ({
+      building,
+      items: items.sort((a, b) => a.room.localeCompare(b.room, undefined, { numeric: true })),
+    }));
+  }, [locations]);
 
   const getModelName = (modelId: string) => {
     const model = models.find(m => m.id === modelId);
@@ -338,8 +363,8 @@ export default function PrintersScreen({ initialPrinterId }: { initialPrinterId?
   };
 
   const getLocationName = (location: {building: string; room: string} | undefined) => {
-    if (!location) return 'Не указано';
-    return `${location.building}, к. ${location.room}`;
+    if (!location) return t('common.notSpecified');
+    return `${location.building}, ${location.room}`;
   };
 
   // Filter printers by search query
@@ -374,12 +399,12 @@ export default function PrintersScreen({ initialPrinterId }: { initialPrinterId?
 
   const handleDeleteModel = (model: PrinterModel) => {
     Alert.alert(
-      'Удалить модель?',
-      `Удалить модель "${model.name}"? Принтеры с этой моделью останутся, но потеряют привязку.`,
+      t('printers.deleteModelTitle'),
+      t('printers.deleteModelConfirm', { name: model.name }),
       [
-        { text: 'Отмена', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Удалить',
+          text: t('common.delete'),
           style: 'destructive',
           onPress: async () => {
             try {
@@ -387,7 +412,7 @@ export default function PrintersScreen({ initialPrinterId }: { initialPrinterId?
               await loadData();
             } catch (error) {
               console.error('Ошибка удаления модели:', error);
-              Alert.alert('Ошибка', 'Не удалось удалить модель');
+              Alert.alert(t('common.error'), t('printers.deleteModelError'));
             }
           },
         },
@@ -428,7 +453,7 @@ export default function PrintersScreen({ initialPrinterId }: { initialPrinterId?
       setAvailableParts(updatedParts);
     } catch (error) {
       console.error('Ошибка сохранения записи:', error);
-      Alert.alert('Ошибка', 'Не удалось сохранить запись истории');
+      Alert.alert(t('common.error'), t('printers.saveLogError'));
     } finally {
       setSavingLog(false);
     }
@@ -436,19 +461,25 @@ export default function PrintersScreen({ initialPrinterId }: { initialPrinterId?
 
   const handleDeleteLog = (log: PrinterLog) => {
     Alert.alert(
-      'Удалить запись?',
-      'Вы уверены, что хотите удалить эту запись из истории?',
+      t('printers.deleteLogTitle'),
+      t('printers.deleteLogConfirmText'),
       [
-        { text: 'Отмена', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Удалить',
+          text: t('common.delete'),
           style: 'destructive',
           onPress: async () => {
             try {
-              await storage.deletePrinterLog(log.id);
+              await storage.deletePrinterLog(log.id, log);
+              const [updatedLogs, updatedParts] = await Promise.all([
+                storage.getPrinterLogs(),
+                storage.getParts(),
+              ]);
+              setAllPrinterLogs(updatedLogs);
+              setAvailableParts(updatedParts);
             } catch (error) {
               console.error('Ошибка удаления записи:', error);
-              Alert.alert('Ошибка', 'Не удалось удалить запись');
+              Alert.alert(t('common.error'), t('printers.deleteLogError'));
             }
           },
         },
@@ -458,7 +489,7 @@ export default function PrintersScreen({ initialPrinterId }: { initialPrinterId?
 
   const handleSaveModel = async () => {
     if (!modelName.trim()) {
-      Alert.alert('Ошибка', 'Введите название модели');
+      Alert.alert(t('common.error'), t('printers.enterModelNameError'));
       return;
     }
 
@@ -479,7 +510,7 @@ export default function PrintersScreen({ initialPrinterId }: { initialPrinterId?
       resetModelForm();
     } catch (error) {
       console.error('Ошибка сохранения модели:', error);
-      Alert.alert('Ошибка', 'Не удалось сохранить модель');
+      Alert.alert(t('common.error'), t('printers.saveModelError'));
     }
   };
 
@@ -492,7 +523,7 @@ export default function PrintersScreen({ initialPrinterId }: { initialPrinterId?
   if (loading) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
-        <Text>Загрузка...</Text>
+        <Text>{t('common.loading')}</Text>
       </View>
     );
   }
@@ -588,7 +619,7 @@ export default function PrintersScreen({ initialPrinterId }: { initialPrinterId?
               >
                 <Text style={styles.pickerButtonText}>
                   {selectedLocation
-                    ? `${selectedLocation.building}, к. ${selectedLocation.room}`
+                    ? `${selectedLocation.building}, ${selectedLocation.room}`
                     : t('printers.selectRoom')}
                 </Text>
               </TouchableOpacity>
@@ -649,7 +680,7 @@ export default function PrintersScreen({ initialPrinterId }: { initialPrinterId?
                 <TouchableWithoutFeedback onPress={() => {}}>
                   <View style={[styles.modalContent, styles.modelPickerContent]}>
                     <View style={styles.modalHeader}>
-                      <Text style={[styles.modalTitle, { marginBottom: 0 }]}>Выберите модель</Text>
+                      <Text style={[styles.modalTitle, { marginBottom: 0 }]}>{t('printers.selectModel')}</Text>
                     </View>
                     <ScrollView
                       style={styles.modelPickerScroll}
@@ -658,7 +689,7 @@ export default function PrintersScreen({ initialPrinterId }: { initialPrinterId?
                       scrollEnabled={models.length > 6}
                     >
                       {models.length === 0 ? (
-                        <Text style={styles.modalEmptyText}>Нет доступных моделей. Добавьте модель через кнопку ✏️</Text>
+                        <Text style={styles.modalEmptyText}>{t('printers.noModelsAvailable')}</Text>
                       ) : (
                         models.map(model => (
                           <TouchableOpacity
@@ -681,7 +712,7 @@ export default function PrintersScreen({ initialPrinterId }: { initialPrinterId?
                       style={[styles.modalCancelButton, { paddingBottom: Math.max(insets.bottom, 16) }]}
                       onPress={handleCloseModelPicker}
                     >
-                      <Text style={styles.modalCancelText}>Закрыть</Text>
+                      <Text style={styles.modalCancelText}>{t('common.close')}</Text>
                     </TouchableOpacity>
                   </View>
                 </TouchableWithoutFeedback>
@@ -714,28 +745,51 @@ export default function PrintersScreen({ initialPrinterId }: { initialPrinterId?
                 <TouchableWithoutFeedback onPress={() => {}}>
                   <View style={styles.modalContent}>
                     <ScrollView style={styles.modalScroll} keyboardShouldPersistTaps="handled">
-                      <Text style={styles.modalTitle}>Выберите помещение</Text>
+                      <Text style={styles.modalTitle}>{t('printers.selectRoom')}</Text>
                       {locations.length === 0 ? (
-                        <Text style={styles.modalEmptyText}>Нет доступных помещений. Создайте их в разделе «Помещения».</Text>
+                        <Text style={styles.modalEmptyText}>{t('printers.noRoomsAvailable')}</Text>
                       ) : (
-                        locations.map(loc => (
-                          <TouchableOpacity
-                            key={`${loc.building}-${loc.room}`}
-                            style={styles.modalItem}
-                            onPress={() => {
-                              setSelectedLocation(loc);
-                              handleCloseLocationPicker();
-                            }}
-                          >
-                            <Text style={styles.modalItemText}>
-                              {loc.building}, к. {loc.room}
-                            </Text>
-                            {selectedLocation &&
-                              selectedLocation.building === loc.building &&
-                              selectedLocation.room === loc.room && (
-                                <Text style={styles.modalCheck}>✓</Text>
-                            )}
-                          </TouchableOpacity>
+                        groupedLocations.map(group => (
+                          <View key={group.building || 'no-building'} style={styles.locationGroup}>
+                            <TouchableOpacity
+                              style={styles.locationGroupHeader}
+                              onPress={() => toggleBuildingInModal(group.building)}
+                              activeOpacity={0.7}
+                            >
+                              <Text style={styles.locationGroupTitle}>
+                                🏢 {group.building ? group.building : t('printers.noBuilding')}
+                              </Text>
+                              <View style={styles.sectionRightRow}>
+                                <View style={styles.locationGroupBadge}>
+                                  <Text style={styles.locationGroupBadgeText}>{group.items.length}</Text>
+                                </View>
+                                <Ionicons
+                                  name={expandedBuildingsInModal[group.building] ? 'chevron-up' : 'chevron-down'}
+                                  size={18}
+                                  color="#666"
+                                  style={{ marginLeft: 6 }}
+                                />
+                              </View>
+                            </TouchableOpacity>
+                            {expandedBuildingsInModal[group.building] &&
+                              group.items.map(loc => (
+                                <TouchableOpacity
+                                  key={`${loc.building}-${loc.room}`}
+                                  style={styles.modalItem}
+                                  onPress={() => {
+                                    setSelectedLocation(loc);
+                                    handleCloseLocationPicker();
+                                  }}
+                                >
+                                  <Text style={styles.modalItemText}>{loc.room}</Text>
+                                  {selectedLocation &&
+                                    selectedLocation.building === loc.building &&
+                                    selectedLocation.room === loc.room && (
+                                      <Text style={styles.modalCheck}>✓</Text>
+                                  )}
+                                </TouchableOpacity>
+                              ))}
+                          </View>
                         ))
                       )}
                     </ScrollView>
@@ -743,7 +797,7 @@ export default function PrintersScreen({ initialPrinterId }: { initialPrinterId?
                       style={[styles.modalCancelButton, { paddingBottom: Math.max(insets.bottom, 16) }]}
                       onPress={handleCloseLocationPicker}
                     >
-                      <Text style={styles.modalCancelText}>Закрыть</Text>
+                      <Text style={styles.modalCancelText}>{t('common.close')}</Text>
                     </TouchableOpacity>
                   </View>
                 </TouchableWithoutFeedback>
@@ -777,17 +831,17 @@ export default function PrintersScreen({ initialPrinterId }: { initialPrinterId?
             >
               <View style={[styles.modalContent, styles.modelManagerContent]}>
                 <View style={styles.modalHeader}>
-                  <Text style={styles.modalTitle}>Управление моделями</Text>
+                  <Text style={styles.modalTitle}>{t('printers.modelsManagerTitle')}</Text>
                   {modelManagerMode === 'list' && (
                     <TouchableOpacity style={styles.addModelButton} onPress={handleAddModel}>
-                      <Text style={styles.addModelButtonText}>+ Добавить новую модель</Text>
+                      <Text style={styles.addModelButtonText}>{t('printers.addModelButton')}</Text>
                     </TouchableOpacity>
                   )}
                 </View>
 
                 {modelManagerMode === 'list' ? (
                   models.length === 0 ? (
-                    <Text style={styles.modalEmptyText}>Модели не добавлены</Text>
+                    <Text style={styles.modalEmptyText}>{t('printers.noModels')}</Text>
                   ) : (
                     <ScrollView
                       style={styles.modalScroll}
@@ -826,50 +880,55 @@ export default function PrintersScreen({ initialPrinterId }: { initialPrinterId?
                     </ScrollView>
                   )
                 ) : (
-                  <ScrollView 
-                    style={styles.modalScroll} 
-                    contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 20) }}
-                    keyboardShouldPersistTaps="handled"
+                  <KeyboardAvoidingView
+                    behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                    style={{ flexShrink: 1 }}
                   >
-                    <View style={styles.modelForm}>
-                      <View style={styles.formGroup}>
-                        <Text style={styles.label}>Название модели *</Text>
-                        <TextInput
-                          style={styles.input}
-                          value={modelName}
-                          onChangeText={setModelName}
-                          placeholder="Например: Ricoh IM C300"
-                          placeholderTextColor="#999999"
-                          autoCapitalize="none"
-                          autoCorrect={false}
-                        />
-                      </View>
+                    <ScrollView 
+                      style={styles.modalScroll} 
+                      contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 20) + 140 }}
+                      keyboardShouldPersistTaps="handled"
+                    >
+                      <View style={styles.modelForm}>
+                        <View style={styles.formGroup}>
+                          <Text style={styles.label}>{t('printers.modelNameLabel')}</Text>
+                          <TextInput
+                            style={styles.input}
+                            value={modelName}
+                            onChangeText={setModelName}
+                            placeholder={t('printers.modelNamePlaceholder')}
+                            placeholderTextColor="#999999"
+                            autoCapitalize="none"
+                            autoCorrect={false}
+                          />
+                        </View>
 
-                      <View style={styles.formGroup}>
-                        <Text style={styles.label}>Описание</Text>
-                        <TextInput
-                          style={[styles.input, styles.textArea]}
-                          value={modelDescription}
-                          onChangeText={setModelDescription}
-                          placeholder="Описание модели"
-                          placeholderTextColor="#999999"
-                          multiline
-                          numberOfLines={3}
-                          autoCapitalize="sentences"
-                          autoCorrect={false}
-                        />
-                      </View>
+                        <View style={styles.formGroup}>
+                          <Text style={styles.label}>{t('printers.modelDescriptionLabel')}</Text>
+                          <TextInput
+                            style={[styles.input, styles.textArea]}
+                            value={modelDescription}
+                            onChangeText={setModelDescription}
+                            placeholder={t('printers.modelDescriptionPlaceholder')}
+                            placeholderTextColor="#999999"
+                            multiline
+                            numberOfLines={3}
+                            autoCapitalize="sentences"
+                            autoCorrect={false}
+                          />
+                        </View>
 
-                      <View style={[styles.buttonRow, { paddingBottom: Math.max(insets.bottom, 20) }]}>
-                        <TouchableOpacity style={[styles.button, styles.cancelButton]} onPress={handleCancelModel}>
-                          <Text style={styles.cancelButtonText}>Отмена</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity style={[styles.button, styles.saveButton]} onPress={handleSaveModel}>
-                          <Text style={styles.saveButtonText}>Сохранить</Text>
-                        </TouchableOpacity>
+                        <View style={[styles.buttonRow, { paddingBottom: Math.max(insets.bottom, 20) }]}>
+                          <TouchableOpacity style={[styles.button, styles.cancelButton]} onPress={handleCancelModel}>
+                            <Text style={styles.cancelButtonText}>{t('common.cancel')}</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity style={[styles.button, styles.saveButton]} onPress={handleSaveModel}>
+                            <Text style={styles.saveButtonText}>{t('common.save')}</Text>
+                          </TouchableOpacity>
+                        </View>
                       </View>
-                    </View>
-                  </ScrollView>
+                    </ScrollView>
+                  </KeyboardAvoidingView>
                 )}
 
                 {modelManagerMode === 'list' && (
@@ -880,7 +939,7 @@ export default function PrintersScreen({ initialPrinterId }: { initialPrinterId?
                       setShowModelManager(false);
                     }}
                   >
-                    <Text style={styles.modalCancelText}>Закрыть</Text>
+                    <Text style={styles.modalCancelText}>{t('common.close')}</Text>
                   </TouchableOpacity>
                 )}
               </View>
@@ -967,28 +1026,28 @@ export default function PrintersScreen({ initialPrinterId }: { initialPrinterId?
 
               {printer.serialNumber && (
                 <View style={styles.infoRow}>
-                  <Text style={styles.infoLabel}>Серийный №:</Text>
+                  <Text style={styles.infoLabel}>{t('printers.serialLabelShort')}</Text>
                   <Text style={styles.infoValue}>{printer.serialNumber}</Text>
                 </View>
               )}
 
               {printer.macAddress && (
                 <View style={styles.infoRow}>
-                  <Text style={styles.infoLabel}>MAC:</Text>
+                  <Text style={styles.infoLabel}>{t('printers.macLabelShort')}</Text>
                   <Text style={styles.infoValue}>{printer.macAddress}</Text>
                 </View>
               )}
 
               {printer.ipAddress && (
                 <View style={styles.infoRow}>
-                  <Text style={styles.infoLabel}>IP:</Text>
+                  <Text style={styles.infoLabel}>{t('printers.ipLabelShort')}</Text>
                   <Text style={styles.infoValue}>{printer.ipAddress}</Text>
                 </View>
               )}
 
               {printer.location && (
                 <View style={styles.infoRow}>
-                  <Text style={styles.infoLabel}>Место:</Text>
+                  <Text style={styles.infoLabel}>{t('printers.locationLabelShort')}</Text>
                   <Text style={styles.infoValue}>
                     {getLocationName(printer.location)}
                   </Text>
@@ -1034,7 +1093,7 @@ export default function PrintersScreen({ initialPrinterId }: { initialPrinterId?
                         await storage.restorePrinter(printer.id);
                         await loadData();
                       } catch (err) {
-                        Alert.alert(t('common.error'), 'Не удалось восстановить принтер');
+                        Alert.alert(t('common.error'), t('printers.restorePrinterError'));
                       }
                     }}
                   >
@@ -1095,17 +1154,17 @@ export default function PrintersScreen({ initialPrinterId }: { initialPrinterId?
           >
             <View style={[styles.modalContent, styles.modelManagerContent]}>
               <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Управление моделями</Text>
+                <Text style={styles.modalTitle}>{t('printers.modelsManagerTitle')}</Text>
                 {modelManagerMode === 'list' && (
                   <TouchableOpacity style={styles.addModelButton} onPress={handleAddModel}>
-                    <Text style={styles.addModelButtonText}>+ Добавить новую модель</Text>
+                    <Text style={styles.addModelButtonText}>{t('printers.addModelButton')}</Text>
                   </TouchableOpacity>
                 )}
               </View>
 
               {modelManagerMode === 'list' ? (
                 models.length === 0 ? (
-                  <Text style={styles.modalEmptyText}>Модели не добавлены</Text>
+                  <Text style={styles.modalEmptyText}>{t('printers.noModels')}</Text>
                 ) : (
                   <ScrollView
                     style={styles.modalScroll}
@@ -1144,50 +1203,55 @@ export default function PrintersScreen({ initialPrinterId }: { initialPrinterId?
                   </ScrollView>
                 )
               ) : (
-                <ScrollView 
-                  style={styles.modalScroll} 
-                  contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 20) }}
-                  keyboardShouldPersistTaps="handled"
+                <KeyboardAvoidingView
+                  behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                  style={{ flexShrink: 1 }}
                 >
-                  <View style={styles.modelForm}>
-                    <View style={styles.formGroup}>
-                      <Text style={styles.label}>Название модели *</Text>
-                      <TextInput
-                        style={styles.input}
-                        value={modelName}
-                        onChangeText={setModelName}
-                        placeholder="Например: Ricoh IM C300"
-                        placeholderTextColor="#999999"
-                        autoCapitalize="none"
-                        autoCorrect={false}
-                      />
-                    </View>
+                  <ScrollView 
+                    style={styles.modalScroll} 
+                    contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 20) + 140 }}
+                    keyboardShouldPersistTaps="handled"
+                  >
+                    <View style={styles.modelForm}>
+                      <View style={styles.formGroup}>
+                        <Text style={styles.label}>{t('printers.modelNameLabel')}</Text>
+                        <TextInput
+                          style={styles.input}
+                          value={modelName}
+                          onChangeText={setModelName}
+                          placeholder={t('printers.modelNamePlaceholder')}
+                          placeholderTextColor="#999999"
+                          autoCapitalize="none"
+                          autoCorrect={false}
+                        />
+                      </View>
 
-                    <View style={styles.formGroup}>
-                      <Text style={styles.label}>Описание</Text>
-                      <TextInput
-                        style={[styles.input, styles.textArea]}
-                        value={modelDescription}
-                        onChangeText={setModelDescription}
-                        placeholder="Описание модели"
-                        placeholderTextColor="#999999"
-                        multiline
-                        numberOfLines={3}
-                        autoCapitalize="sentences"
-                        autoCorrect={false}
-                      />
-                    </View>
+                      <View style={styles.formGroup}>
+                        <Text style={styles.label}>{t('printers.modelDescriptionLabel')}</Text>
+                        <TextInput
+                          style={[styles.input, styles.textArea]}
+                          value={modelDescription}
+                          onChangeText={setModelDescription}
+                          placeholder={t('printers.modelDescriptionPlaceholder')}
+                          placeholderTextColor="#999999"
+                          multiline
+                          numberOfLines={3}
+                          autoCapitalize="sentences"
+                          autoCorrect={false}
+                        />
+                      </View>
 
-                    <View style={[styles.buttonRow, { paddingBottom: Math.max(insets.bottom, 20) }]}>
-                      <TouchableOpacity style={[styles.button, styles.cancelButton]} onPress={handleCancelModel}>
-                        <Text style={styles.cancelButtonText}>Отмена</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity style={[styles.button, styles.saveButton]} onPress={handleSaveModel}>
-                        <Text style={styles.saveButtonText}>Сохранить</Text>
-                      </TouchableOpacity>
+                      <View style={[styles.buttonRow, { paddingBottom: Math.max(insets.bottom, 20) }]}>
+                        <TouchableOpacity style={[styles.button, styles.cancelButton]} onPress={handleCancelModel}>
+                          <Text style={styles.cancelButtonText}>{t('common.cancel')}</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={[styles.button, styles.saveButton]} onPress={handleSaveModel}>
+                          <Text style={styles.saveButtonText}>{t('common.save')}</Text>
+                        </TouchableOpacity>
+                      </View>
                     </View>
-                  </View>
-                </ScrollView>
+                  </ScrollView>
+                </KeyboardAvoidingView>
               )}
 
               {modelManagerMode === 'list' && (
@@ -1198,7 +1262,7 @@ export default function PrintersScreen({ initialPrinterId }: { initialPrinterId?
                     setShowModelManager(false);
                   }}
                 >
-                  <Text style={styles.modalCancelText}>Закрыть</Text>
+                  <Text style={styles.modalCancelText}>{t('common.close')}</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -1230,13 +1294,13 @@ export default function PrintersScreen({ initialPrinterId }: { initialPrinterId?
             <View style={styles.historyModalContent}>
               <View style={styles.historyHeader}>
                 <Text style={styles.historyTitle} numberOfLines={1}>
-                  История: {selectedHistoryPrinter?.name}
+                  {t('printers.historyTitle', { name: selectedHistoryPrinter?.name })}
                 </Text>
                 <TouchableOpacity
                   style={styles.closeButton}
                   onPress={() => setSelectedHistoryPrinter(null)}
                 >
-                  <Text style={styles.closeButtonText}>Закрыть</Text>
+                  <Text style={styles.closeButtonText}>{t('common.close')}</Text>
                 </TouchableOpacity>
               </View>
 
@@ -1245,7 +1309,7 @@ export default function PrintersScreen({ initialPrinterId }: { initialPrinterId?
                 onPress={() => setShowAddLogForm(prev => !prev)}
               >
                 <Text style={styles.addLogToggleText}>
-                  {showAddLogForm ? '✕ Скрыть форму' : '+ Добавить запись'}
+                  {showAddLogForm ? t('printers.hideForm') : t('printers.addLog')}
                 </Text>
               </TouchableOpacity>
 
@@ -1253,7 +1317,7 @@ export default function PrintersScreen({ initialPrinterId }: { initialPrinterId?
                 <View style={styles.logFormContainer}>
                   <TextInput
                     style={styles.logInput}
-                    placeholder="Описание работ (опционально)"
+                    placeholder={t('printers.workDescriptionPlaceholder')}
                     placeholderTextColor="#999999"
                     value={logDescription}
                     onChangeText={setLogDescription}
@@ -1262,13 +1326,13 @@ export default function PrintersScreen({ initialPrinterId }: { initialPrinterId?
                   />
 
                   <View style={styles.logPartSection}>
-                    <Text style={styles.formSectionLabel}>Списание деталей со склада:</Text>
+                    <Text style={styles.formSectionLabel}>{t('printers.writeOffPartsTitle')}</Text>
                     {selectedPartsForLog.length > 0 && (
                       <View style={{ marginBottom: 8 }}>
                         {selectedPartsForLog.map((item, index) => (
                           <View key={item.part.id} style={[styles.selectedPartBadgeRow, { marginBottom: 6 }]}>
                             <Text style={[styles.selectedPartBadgeText, { flex: 1 }]}>
-                              🔧 {item.part.partNumber} — {item.part.description} ({item.quantity} шт.)
+                              🔧 {item.part.partNumber} — {item.part.description} ({item.quantity} {t('common.pcs')})
                             </Text>
                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                               <TouchableOpacity
@@ -1305,7 +1369,7 @@ export default function PrintersScreen({ initialPrinterId }: { initialPrinterId?
                       style={styles.selectPartBtn}
                       onPress={() => setShowLogPartPicker(true)}
                     >
-                      <Text style={styles.selectPartBtnText}>+ Добавить детали для списания</Text>
+                      <Text style={styles.selectPartBtnText}>{t('printers.addPartsForWriteOff')}</Text>
                     </TouchableOpacity>
                   </View>
 
@@ -1318,7 +1382,7 @@ export default function PrintersScreen({ initialPrinterId }: { initialPrinterId?
                         setSelectedPartsForLog([]);
                       }}
                     >
-                      <Text style={styles.logCancelButtonText}>Отмена</Text>
+                      <Text style={styles.logCancelButtonText}>{t('common.cancel')}</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={[styles.logSaveButton, savingLog && { opacity: 0.6 }]}
@@ -1326,7 +1390,7 @@ export default function PrintersScreen({ initialPrinterId }: { initialPrinterId?
                       disabled={savingLog}
                     >
                       <Text style={styles.logSaveButtonText}>
-                        {savingLog ? 'Сохранение...' : 'Сохранить'}
+                        {savingLog ? t('common.saving') : t('common.save')}
                       </Text>
                     </TouchableOpacity>
                   </View>
@@ -1339,10 +1403,10 @@ export default function PrintersScreen({ initialPrinterId }: { initialPrinterId?
                 showsVerticalScrollIndicator={true}
               >
                 {historyLogs.length === 0 ? (
-                  <Text style={styles.noLogsText}>История обслуживания пуста</Text>
+                  <Text style={styles.noLogsText}>{t('printers.emptyHistory')}</Text>
                 ) : (
                   historyLogs.map(item => {
-                    const formattedDate = new Date(item.date).toLocaleDateString('ru-RU', {
+                    const formattedDate = new Date(item.date).toLocaleDateString(i18n.language === 'en' ? 'en-US' : 'ru-RU', {
                       day: '2-digit',
                       month: '2-digit',
                       year: 'numeric',
@@ -1366,14 +1430,16 @@ export default function PrintersScreen({ initialPrinterId }: { initialPrinterId?
                           <View style={styles.partBadgeContainer}>
                             {item.partsDeducted.map((pDeduct, pIdx) => (
                               <Text key={pIdx} style={styles.partBadgeText}>
-                                🔧 Списано: {pDeduct.partName} ({pDeduct.quantity} шт.)
+                                {t('printers.deductedWithQty', { name: pDeduct.partName, qty: pDeduct.quantity })}
                               </Text>
                             ))}
                           </View>
                         ) : item.partName ? (
                           <View style={styles.partBadgeContainer}>
                             <Text style={styles.partBadgeText}>
-                              🔧 Списано: {item.partName} {item.quantityDeducted ? `(${item.quantityDeducted} шт.)` : ''}
+                              {item.quantityDeducted
+                                ? t('printers.deductedWithQty', { name: item.partName, qty: item.quantityDeducted })
+                                : t('printers.deducted', { name: item.partName })}
                             </Text>
                           </View>
                         ) : null}
@@ -1400,17 +1466,17 @@ export default function PrintersScreen({ initialPrinterId }: { initialPrinterId?
           ensureImmersiveMode();
         }}
       >
-        <TouchableWithoutFeedback onPress={() => { setShowLogPartPicker(false); setPartSearchQuery(''); }}>
+        <TouchableWithoutFeedback onPress={() => { setShowLogPartPicker(false); setPartSearchQuery(''); ensureImmersiveMode(); }}>
           <View style={styles.modalOverlay}>
             <TouchableWithoutFeedback onPress={() => {}}>
               <View style={styles.modalContent}>
-                <Text style={styles.modalTitle}>Выберите детали со склада</Text>
+                <Text style={styles.modalTitle}>{t('printers.selectPartsModalTitle')}</Text>
 
                 <TextInput
                   style={styles.input}
                   value={partSearchQuery}
                   onChangeText={setPartSearchQuery}
-                  placeholder="Поиск по названию или парт-номеру..."
+                  placeholder={t('parts.searchPlaceholder')}
                   placeholderTextColor="#999999"
                 />
 
@@ -1433,7 +1499,7 @@ export default function PrintersScreen({ initialPrinterId }: { initialPrinterId?
                     if (filteredLogParts.length === 0) {
                       return (
                         <Text style={styles.modalEmptyText}>
-                          {partSearchQuery ? 'Ничего не найдено' : 'Нет совместимых деталей на складе'}
+                          {partSearchQuery ? t('common.notFound') : t('printers.noCompatiblePartsInStock')}
                         </Text>
                       );
                     }
@@ -1457,7 +1523,7 @@ export default function PrintersScreen({ initialPrinterId }: { initialPrinterId?
                               {part.partNumber} — {part.description}
                             </Text>
                             <Text style={styles.modalItemDescription}>
-                              В наличии: {part.quantity} шт.
+                              {t('printers.inStockCount', { count: part.quantity })}
                             </Text>
                           </View>
                           {isSelected && <Text style={styles.modalCheck}>✓</Text>}
@@ -1472,9 +1538,10 @@ export default function PrintersScreen({ initialPrinterId }: { initialPrinterId?
                   onPress={() => {
                     setShowLogPartPicker(false);
                     setPartSearchQuery('');
+                    ensureImmersiveMode();
                   }}
                 >
-                  <Text style={styles.modalCancelText}>Готово</Text>
+                  <Text style={styles.modalCancelText}>{t('common.done')}</Text>
                 </TouchableOpacity>
               </View>
             </TouchableWithoutFeedback>
@@ -1498,10 +1565,10 @@ export default function PrintersScreen({ initialPrinterId }: { initialPrinterId?
           <View style={styles.modalOverlay}>
             <TouchableWithoutFeedback onPress={() => {}}>
               <View style={styles.modalContent}>
-                <Text style={styles.modalTitle}>Выберите бренд</Text>
+                <Text style={styles.modalTitle}>{t('printers.selectBrand')}</Text>
                 <ScrollView style={styles.modalScroll}>
                   {brands.length === 0 ? (
-                    <Text style={styles.modalEmptyText}>Нет доступных брендов</Text>
+                    <Text style={styles.modalEmptyText}>{t('printers.noBrandsAvailable')}</Text>
                   ) : (
                     brands.map(b => (
                       <TouchableOpacity
@@ -1525,7 +1592,7 @@ export default function PrintersScreen({ initialPrinterId }: { initialPrinterId?
                   style={styles.modalCancelButton}
                   onPress={() => setShowBrandPicker(false)}
                 >
-                  <Text style={styles.modalCancelText}>Закрыть</Text>
+                  <Text style={styles.modalCancelText}>{t('common.close')}</Text>
                 </TouchableOpacity>
               </View>
             </TouchableWithoutFeedback>
@@ -2097,6 +2164,41 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 14,
     fontWeight: '600',
+  },
+  locationGroup: {
+    marginBottom: 8,
+  },
+  locationGroupHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F1F3F5',
+    paddingVertical: 7,
+    paddingHorizontal: 16,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: '#E9ECEF',
+  },
+  sectionRightRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  locationGroupTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#495057',
+    letterSpacing: 0.3,
+  },
+  locationGroupBadge: {
+    backgroundColor: '#E2E6EA',
+    borderRadius: 10,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+  },
+  locationGroupBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#6C757D',
   },
   modalItem: {
     flexDirection: 'row',

@@ -16,6 +16,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import storage from '../services/storage';
 import { Ionicons } from '@expo/vector-icons';
+import { ensureImmersiveMode } from '../utils/useImmersiveMode';
 import { Note, Part, Printer, PrinterModel } from '../models/types';
 
 let draftNoteTitle = '';
@@ -47,10 +48,11 @@ export default function NotesScreen() {
   // Modal state
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedNote, setSelectedNote] = useState<Note | null>(null);
-  const [selectedPartNumber, setSelectedPartNumber] = useState('');
+  const [selectedParts, setSelectedParts] = useState<Array<{ part: Part; quantity: number }>>([]);
   const [selectedPrinterId, setSelectedPrinterId] = useState<string | null>(null);
-  const [partQuantity, setPartQuantity] = useState('1');
+  const [workDescription, setWorkDescription] = useState('');
   const [showPrinterPicker, setShowPrinterPicker] = useState(false);
+  const [printerSearchQuery, setPrinterSearchQuery] = useState('');
   const [showPartsPicker, setShowPartsPicker] = useState(false);
   const [partsSearchQuery, setPartsSearchQuery] = useState('');
 
@@ -135,7 +137,7 @@ export default function NotesScreen() {
       console.log('[NotesScreen] Задача успешно добавлена!');
     } catch (error: any) {
       console.error('[NotesScreen] Ошибка добавления заметки:', error);
-      Alert.alert(t('common.error'), error?.message || 'Не удалось добавить заметку');
+      Alert.alert(t('common.error'), error?.message || t('notes.addNoteError'));
     } finally {
       setIsProcessing(false);
     }
@@ -164,7 +166,7 @@ export default function NotesScreen() {
               console.log('[NotesScreen] Note deleted successfully!');
             } catch (error: any) {
               console.error('[NotesScreen] Error deleting note:', error);
-              Alert.alert(t('common.error'), error?.message || 'Сбой при удалении');
+              Alert.alert(t('common.error'), error?.message || t('notes.deleteNoteError'));
             } finally {
               setIsProcessing(false);
             }
@@ -185,15 +187,17 @@ export default function NotesScreen() {
         console.log('[NotesScreen] Note completion cancelled successfully');
       } catch (error: any) {
         console.error('[NotesScreen] Error cancelling completion:', error);
-        Alert.alert(t('common.error'), error?.message || 'Не удалось отменить выполнение заметки');
+        Alert.alert(t('common.error'), error?.message || t('notes.cancelCompletionError'));
       } finally {
         setIsProcessing(false);
       }
     } else {
       setSelectedNote(note);
-      setSelectedPartNumber('');
-      setSelectedPrinterId(null);
-      setPartQuantity('1');
+      setSelectedParts([]);
+      setSelectedPrinterId(note.relatedPrinterId || null);
+      setWorkDescription('');
+      setPrinterSearchQuery('');
+      setPartsSearchQuery('');
       setModalVisible(true);
     }
   };
@@ -225,64 +229,98 @@ export default function NotesScreen() {
 
     // 1. Валидация выбора принтера (Обязательное поле при списании)
     if (!selectedPrinterId) {
-      Alert.alert(t('common.error'), 'Пожалуйста, выберите принтер для списания');
+      Alert.alert(t('common.error'), t('notes.selectPrinterForWriteOffError'));
       return;
     }
 
-    // 2. Валидация выбора детали
-    if (!selectedPartNumber) {
-      Alert.alert(t('common.error'), 'Пожалуйста, выберите деталь для списания из списка');
+    // 2. Валидация выбора деталей (хотя бы одна деталь)
+    if (selectedParts.length === 0) {
+      Alert.alert(t('common.error'), t('notes.selectAtLeastOnePartError'));
       return;
     }
 
-    // 3. Валидация количества
-    const deductQty = parseInt(partQuantity, 10);
-    if (isNaN(deductQty) || deductQty < 1) {
-      Alert.alert(t('common.error'), 'Укажите количество для списания (минимум 1)');
-      return;
-    }
-
-    // 4. Поиск детали на складе
-    const selectedPart = parts.find(
-      p => p.partNumber.toLowerCase() === selectedPartNumber.toLowerCase()
-    );
-    if (!selectedPart) {
-      Alert.alert(t('common.error'), 'Деталь не найдена на складе. Выберите деталь из списка.');
-      return;
-    }
-
-    if (deductQty > selectedPart.quantity) {
-      Alert.alert(t('common.error'), 'Недостаточно деталей на складе');
-      return;
+    // 3. Валидация доступного количества на складе для каждой детали
+    for (const item of selectedParts) {
+      const currentPart = parts.find(p => p.id === item.part.id);
+      const stock = currentPart ? currentPart.quantity : item.part.quantity;
+      if (item.quantity < 1 || item.quantity > stock) {
+        Alert.alert(
+          t('common.error'),
+          t('notes.partQuantityExceedsStockError', {
+            partNumber: item.part.partNumber,
+            stock: stock,
+          })
+        );
+        return;
+      }
     }
 
     setIsProcessing(true);
     try {
-      console.log('[NotesScreen] Начинаем списание детали...');
-      const newQuantity = selectedPart.quantity - deductQty;
-      await storage.updatePart(selectedPart.id, { quantity: newQuantity });
+      console.log('[NotesScreen] Начинаем списание деталей...');
+      const partsDeducted = selectedParts.map(item => ({
+        partId: item.part.id,
+        partName: `${item.part.partNumber} - ${item.part.description}`,
+        quantity: item.quantity,
+      }));
+
+      const desc = workDescription.trim() || selectedNote.title;
 
       await storage.addPrinterLog({
         noteId: selectedNote.id,
         printerId: selectedPrinterId,
         date: new Date().toISOString(),
-        description: selectedNote.title,
-        partId: selectedPart.id,
-        partName: `${selectedPart.partNumber} - ${selectedPart.description}`,
-        quantityDeducted: deductQty,
+        description: desc,
+        partsDeducted,
+        partId: partsDeducted.length === 1 ? partsDeducted[0].partId : undefined,
+        partName: partsDeducted.length === 1 ? partsDeducted[0].partName : undefined,
+        quantityDeducted: partsDeducted.length === 1 ? partsDeducted[0].quantity : undefined,
       });
 
       await storage.updateNote(selectedNote.id, { completed: true });
-      Alert.alert(t('common.success'), 'Деталь успешно списана, задача выполнена!');
+      Alert.alert(t('common.success'), t('notes.writeOffSuccess'));
       setModalVisible(false);
       setSelectedNote(null);
-      setSelectedPartNumber('');
+      setSelectedParts([]);
       setSelectedPrinterId(null);
-      setPartQuantity('1');
+      setWorkDescription('');
+      setPrinterSearchQuery('');
+      setPartsSearchQuery('');
       await loadData();
     } catch (error: any) {
-      console.error('[NotesScreen] Ошибка при списании детали:', error);
-      Alert.alert(t('common.error'), error?.message || 'Не удалось выполнить списание');
+      console.error('[NotesScreen] Ошибка при списании деталей:', error);
+      Alert.alert(t('common.error'), error?.message || t('notes.writeOffError'));
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleCompleteWithoutWriteOff = async () => {
+    if (!selectedNote || isProcessing) return;
+    setIsProcessing(true);
+    try {
+      const desc = workDescription.trim() || selectedNote.title;
+      if (selectedPrinterId) {
+        await storage.addPrinterLog({
+          noteId: selectedNote.id,
+          printerId: selectedPrinterId,
+          date: new Date().toISOString(),
+          description: desc,
+        });
+      }
+      await storage.updateNote(selectedNote.id, { completed: true });
+      Alert.alert(t('common.success'), t('notes.completeWithoutWriteOffSuccess'));
+      setModalVisible(false);
+      setSelectedNote(null);
+      setSelectedParts([]);
+      setSelectedPrinterId(null);
+      setWorkDescription('');
+      setPrinterSearchQuery('');
+      setPartsSearchQuery('');
+      await loadData();
+    } catch (error: any) {
+      console.error('[NotesScreen] Ошибка обновления заметки:', error);
+      Alert.alert(t('common.error'), error?.message || t('notes.updateNoteError'));
     } finally {
       setIsProcessing(false);
     }
@@ -298,7 +336,7 @@ export default function NotesScreen() {
     }
     const selModel = models.find(m => m.id === selPrinter.modelId);
     const modelName = selModel ? selModel.name : '';
-    const roomName = selPrinter.location ? `${selPrinter.location.building}, к. ${selPrinter.location.room}` : '';
+    const roomName = selPrinter.location ? `${selPrinter.location.building}, ${selPrinter.location.room}` : '';
     const detailsArr = [modelName, roomName].filter(Boolean);
     const detailsStr = detailsArr.length > 0 ? detailsArr.join(', ') : '';
 
@@ -412,22 +450,35 @@ export default function NotesScreen() {
         animationType="slide"
         transparent={true}
         visible={modalVisible}
-        onRequestClose={() => setModalVisible(false)}
+        statusBarTranslucent={true}
+        onShow={ensureImmersiveMode}
+        onRequestClose={() => {
+          setModalVisible(false);
+          ensureImmersiveMode();
+        }}
       >
-        <TouchableWithoutFeedback onPress={() => setModalVisible(false)}>
-          <View style={styles.modalOverlay}>
-            <TouchableWithoutFeedback onPress={() => {}}>
-              <KeyboardAvoidingView 
-                style={{ width: '100%', alignItems: 'center' }}
-                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-              >
-                <View style={styles.modalContent}>
-                  <ScrollView style={{ flexShrink: 1, width: '100%' }} contentContainerStyle={{ paddingBottom: 100 }} keyboardShouldPersistTaps="handled">
-                    <Text style={styles.modalTitle}>{t('notes.completeModalTitle')}</Text>
-                    <Text style={styles.modalSubtitle}>{t('notes.noteLabel', { title: selectedNote?.title })}</Text>
+        <View style={styles.modalOverlay}>
+          <TouchableWithoutFeedback onPress={() => setModalVisible(false)}>
+            <View style={StyleSheet.absoluteFillObject} />
+          </TouchableWithoutFeedback>
 
-                    {/* 1. ПРИНТЕР (Перемещен на 1-е место сверху) */}
-                    <Text style={styles.inputLabel}>{t('notes.printerLabel')}</Text>
+          <KeyboardAvoidingView 
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            style={styles.keyboardAvoidingView}
+            pointerEvents="box-none"
+          >
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>{t('notes.completeModalTitle')}</Text>
+              <Text style={styles.modalSubtitle}>{t('notes.noteLabel', { title: selectedNote?.title })}</Text>
+
+              <ScrollView 
+                style={{ flex: 1, width: '100%' }} 
+                contentContainerStyle={{ paddingBottom: 20 }} 
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+              >
+                    {/* 1. ПРИНТЕР */}
+                    <Text style={[styles.inputLabel, { marginTop: 0 }]}>{t('notes.printerLabel')}</Text>
                     <TouchableOpacity
                       style={styles.printerPickerButton}
                       onPress={() => setShowPrinterPicker(true)}
@@ -435,32 +486,126 @@ export default function NotesScreen() {
                       {renderSelectedPrinterText()}
                     </TouchableOpacity>
 
-                    {/* 2. ДЕТАЛЬ */}
-                    <Text style={styles.inputLabel}>{t('notes.partNumberLabel')}</Text>
-                    <TouchableOpacity
-                      style={styles.pickerButton}
-                      onPress={() => setShowPartsPicker(true)}
-                    >
-                      <Text style={styles.pickerButtonText}>
-                        {selectedPartNumber || t('notes.selectPart')}
+                    {/* 2. ДЕТАЛИ ДЛЯ СПИСАНИЯ */}
+                    <View style={styles.partsHeaderRow}>
+                      <Text style={[styles.inputLabel, { marginTop: 0, marginBottom: 0 }]}>
+                        {t('notes.partsToWriteOff')}
                       </Text>
-                    </TouchableOpacity>
-                    <Text style={styles.helpText}>
-                      {t('notes.clickToSelectPart')}
-                    </Text>
+                      <TouchableOpacity
+                        style={styles.addPartButton}
+                        onPress={() => setShowPartsPicker(true)}
+                      >
+                        <Text style={styles.addPartButtonText}>+ {t('notes.addPart')}</Text>
+                      </TouchableOpacity>
+                    </View>
 
-                    {/* 3. КОЛИЧЕСТВО */}
-                    <Text style={styles.inputLabel}>{t('notes.quantityLabel')}</Text>
+                    {selectedParts.length === 0 ? (
+                      <View style={styles.emptyPartsContainer}>
+                        <Text style={styles.emptyPartsText}>
+                          {t('notes.noPartsSelected')}
+                        </Text>
+                      </View>
+                    ) : (
+                      <View style={styles.selectedPartsList}>
+                        {selectedParts.map((item, index) => {
+                          const currentPart = parts.find(p => p.id === item.part.id) || item.part;
+                          return (
+                            <View key={item.part.id} style={styles.selectedPartCard}>
+                              <View style={styles.selectedPartInfo}>
+                                <Text style={styles.selectedPartNumber} numberOfLines={1}>
+                                  {item.part.partNumber}
+                                </Text>
+                                <Text style={styles.selectedPartDesc} numberOfLines={1}>
+                                  {item.part.description}
+                                </Text>
+                                <Text style={styles.selectedPartStock}>
+                                  {t('notes.inStockCount', { count: currentPart.quantity })}
+                                </Text>
+                              </View>
+
+                              <View style={styles.selectedPartControls}>
+                                <TouchableOpacity
+                                  style={styles.quantityStepBtn}
+                                  onPress={() => {
+                                    setSelectedParts(prev =>
+                                      prev.map((p, i) =>
+                                        i === index ? { ...p, quantity: Math.max(1, p.quantity - 1) } : p
+                                      )
+                                    );
+                                  }}
+                                >
+                                  <Text style={styles.quantityStepBtnText}>-</Text>
+                                </TouchableOpacity>
+
+                                <TextInput
+                                  style={styles.partQtyInput}
+                                  value={String(item.quantity)}
+                                  keyboardType="numeric"
+                                  onChangeText={val => {
+                                    const cleaned = val.replace(/[^0-9]/g, '');
+                                    if (cleaned === '') {
+                                      setSelectedParts(prev =>
+                                        prev.map((p, i) => (i === index ? { ...p, quantity: 1 } : p))
+                                      );
+                                    } else {
+                                      const num = parseInt(cleaned, 10);
+                                      const clamped = Math.max(1, Math.min(currentPart.quantity, num));
+                                      setSelectedParts(prev =>
+                                        prev.map((p, i) => (i === index ? { ...p, quantity: clamped } : p))
+                                      );
+                                    }
+                                  }}
+                                />
+
+                                <TouchableOpacity
+                                  style={styles.quantityStepBtn}
+                                  onPress={() => {
+                                    if (item.quantity >= currentPart.quantity) {
+                                      Alert.alert(
+                                        t('common.warning'),
+                                        t('notes.partAlreadyAtMaxStock', {
+                                          partNumber: item.part.partNumber,
+                                          max: currentPart.quantity,
+                                        })
+                                      );
+                                      return;
+                                    }
+                                    setSelectedParts(prev =>
+                                      prev.map((p, i) =>
+                                        i === index ? { ...p, quantity: Math.min(currentPart.quantity, p.quantity + 1) } : p
+                                      )
+                                    );
+                                  }}
+                                >
+                                  <Text style={styles.quantityStepBtnText}>+</Text>
+                                </TouchableOpacity>
+
+                                <TouchableOpacity
+                                  style={styles.removePartButton}
+                                  onPress={() => {
+                                    setSelectedParts(prev => prev.filter((_, i) => i !== index));
+                                  }}
+                                >
+                                  <Text style={styles.removePartButtonText}>🗑</Text>
+                                </TouchableOpacity>
+                              </View>
+                            </View>
+                          );
+                        })}
+                      </View>
+                    )}
+
+                    {/* 3. ВЫПОЛНЕННЫЕ РАБОТЫ / КОММЕНТАРИЙ */}
+                    <Text style={styles.inputLabel}>{t('notes.workDescriptionLabel')}</Text>
                     <TextInput
-                      style={styles.quantityInput}
-                      value={partQuantity}
-                      onChangeText={(text) => {
-                        const cleaned = text.replace(/[^0-9]/g, '');
-                        setPartQuantity(cleaned);
-                      }}
-                      placeholder="1"
+                      style={styles.workDescriptionInput}
+                      value={workDescription}
+                      onChangeText={setWorkDescription}
+                      placeholder={t('notes.workDescriptionPlaceholder')}
                       placeholderTextColor="#999999"
-                      keyboardType="numeric"
+                      multiline={true}
+                      numberOfLines={3}
+                      textAlignVertical="top"
                     />
                   </ScrollView>
 
@@ -471,9 +616,11 @@ export default function NotesScreen() {
                       onPress={() => {
                         setModalVisible(false);
                         setSelectedNote(null);
-                        setSelectedPartNumber('');
+                        setSelectedParts([]);
                         setSelectedPrinterId(null);
-                        setPartQuantity('1');
+                        setWorkDescription('');
+                        setPrinterSearchQuery('');
+                        setPartsSearchQuery('');
                       }}
                     >
                       <Text style={styles.cancelButtonText}>{t('common.cancel')}</Text>
@@ -481,31 +628,7 @@ export default function NotesScreen() {
                     <TouchableOpacity 
                       style={[styles.modalButton, styles.completeWithoutWriteOffButton, isProcessing && { opacity: 0.6 }]}
                       disabled={isProcessing}
-                      onPress={async () => {
-                        if (!selectedNote || isProcessing) return;
-                        setIsProcessing(true);
-                        try {
-                          await storage.addPrinterLog({
-                            noteId: selectedNote.id,
-                            printerId: selectedPrinterId || '',
-                            date: new Date().toISOString(),
-                            description: selectedNote.title,
-                          });
-                          await storage.updateNote(selectedNote.id, { completed: true });
-                          Alert.alert(t('common.success'), 'Задача выполнена и добавлена в отчет');
-                          setModalVisible(false);
-                          setSelectedNote(null);
-                          setSelectedPartNumber('');
-                          setSelectedPrinterId(null);
-                          setPartQuantity('1');
-                          await loadData();
-                        } catch (error: any) {
-                          console.error('[NotesScreen] Ошибка обновления заметки:', error);
-                          Alert.alert(t('common.error'), error?.message || 'Не удалось обновить заметку');
-                        } finally {
-                          setIsProcessing(false);
-                        }
-                      }}
+                      onPress={handleCompleteWithoutWriteOff}
                     >
                       <Text style={styles.completeWithoutWriteOffButtonText}>
                         {isProcessing ? t('common.processing') : t('notes.completeWithoutWriteOff')}
@@ -523,47 +646,82 @@ export default function NotesScreen() {
                   </View>
                 </View>
               </KeyboardAvoidingView>
-            </TouchableWithoutFeedback>
-          </View>
-        </TouchableWithoutFeedback>
-      </Modal>
+            </View>
+          </Modal>
 
       {/* Printer Picker Modal */}
       <Modal
         visible={showPrinterPicker}
         transparent={true}
         animationType="slide"
-        onRequestClose={() => setShowPrinterPicker(false)}
+        statusBarTranslucent={true}
+        onShow={ensureImmersiveMode}
+        onRequestClose={() => {
+          setShowPrinterPicker(false);
+          setPrinterSearchQuery('');
+          ensureImmersiveMode();
+        }}
       >
-        <TouchableWithoutFeedback onPress={() => setShowPrinterPicker(false)}>
+        <TouchableWithoutFeedback onPress={() => { setShowPrinterPicker(false); setPrinterSearchQuery(''); }}>
           <View style={styles.printerModalOverlay}>
             <TouchableWithoutFeedback onPress={() => {}}>
               <View style={styles.printerModalContent}>
                 <Text style={styles.printerModalTitle}>{t('notes.selectPrinterModalTitle')}</Text>
-                <ScrollView>
-                  {(() => {
-                    const selectedPartObj = parts.find(
-                      p => p.partNumber.toLowerCase() === selectedPartNumber.toLowerCase()
-                    );
-                    const filteredPrintersForTask = printers.filter(printer => {
-                      if (!selectedPartObj || !selectedPartObj.compatibleModels || selectedPartObj.compatibleModels.length === 0) {
-                        return true;
-                      }
-                      return selectedPartObj.compatibleModels.includes(printer.modelId);
-                    });
 
-                    if (filteredPrintersForTask.length === 0) {
+                <View style={styles.modalSearchContainer}>
+                  <Ionicons name="search" size={18} color="#888" style={{ marginRight: 8 }} />
+                  <TextInput
+                    style={styles.modalSearchInput}
+                    placeholder={t('notes.searchPrintersPlaceholder')}
+                    placeholderTextColor="#999999"
+                    value={printerSearchQuery}
+                    onChangeText={setPrinterSearchQuery}
+                    autoCorrect={false}
+                  />
+                  {printerSearchQuery.length > 0 && (
+                    <TouchableOpacity
+                      onPress={() => setPrinterSearchQuery('')}
+                      style={{ padding: 4 }}
+                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    >
+                      <Ionicons name="close-circle" size={18} color="#888" />
+                    </TouchableOpacity>
+                  )}
+                </View>
+
+                <ScrollView style={{ maxHeight: 350 }}>
+                  {(() => {
+                    const query = printerSearchQuery.trim().toLowerCase();
+                    const filteredPrinters = printers
+                      .filter(printer => {
+                        if (!query) return true;
+                        const selModel = models.find(m => m.id === printer.modelId);
+                        const modelName = selModel ? selModel.name.toLowerCase() : '';
+                        const printerName = printer.name.toLowerCase();
+                        const building = printer.location?.building?.toLowerCase() || '';
+                        const room = printer.location?.room?.toLowerCase() || '';
+                        const locationStr = `${building} ${room}`;
+
+                        return (
+                          printerName.includes(query) ||
+                          modelName.includes(query) ||
+                          locationStr.includes(query)
+                        );
+                      })
+                      .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true }));
+
+                    if (filteredPrinters.length === 0) {
                       return (
-                        <Text style={{ textAlign: 'center', color: '#888', marginVertical: 20 }}>
-                          {t('notes.noCompatiblePrinters')}
+                        <Text style={styles.modalEmptyText}>
+                          {printerSearchQuery ? t('common.notFound') : t('notes.noPrintersFound')}
                         </Text>
                       );
                     }
 
-                    return filteredPrintersForTask.map(printer => {
+                    return filteredPrinters.map(printer => {
                       const selModel = models.find(m => m.id === printer.modelId);
                       const modelName = selModel ? selModel.name : '';
-                      const roomName = printer.location ? `${printer.location.building}, к. ${printer.location.room}` : '';
+                      const roomName = printer.location ? `${printer.location.building}, ${printer.location.room}` : '';
                       const detailsArr = [modelName, roomName].filter(Boolean);
                       const detailsStr = detailsArr.length > 0 ? detailsArr.join(', ') : '';
 
@@ -574,6 +732,7 @@ export default function NotesScreen() {
                           onPress={() => {
                             setSelectedPrinterId(printer.id);
                             setShowPrinterPicker(false);
+                            setPrinterSearchQuery('');
                           }}
                         >
                           <Text style={styles.printerModalItemText} numberOfLines={1}>
@@ -594,7 +753,10 @@ export default function NotesScreen() {
                 </ScrollView>
                 <TouchableOpacity
                   style={styles.printerModalCancelButton}
-                  onPress={() => setShowPrinterPicker(false)}
+                  onPress={() => {
+                    setShowPrinterPicker(false);
+                    setPrinterSearchQuery('');
+                  }}
                 >
                   <Text style={styles.printerModalCancelText}>{t('common.close')}</Text>
                 </TouchableOpacity>
@@ -609,70 +771,135 @@ export default function NotesScreen() {
         visible={showPartsPicker}
         transparent={true}
         animationType="slide"
-        onRequestClose={() => { setShowPartsPicker(false); setPartsSearchQuery(''); }}
+        statusBarTranslucent={true}
+        onShow={ensureImmersiveMode}
+        onRequestClose={() => {
+          setShowPartsPicker(false);
+          setPartsSearchQuery('');
+          ensureImmersiveMode();
+        }}
       >
         <TouchableWithoutFeedback onPress={() => { setShowPartsPicker(false); setPartsSearchQuery(''); }}>
           <View style={styles.printerModalOverlay}>
             <TouchableWithoutFeedback onPress={() => {}}>
               <View style={styles.printerModalContent}>
                 <Text style={styles.printerModalTitle}>{t('notes.selectPartModalTitle')}</Text>
-                <TextInput
-                  style={styles.partsSearchInput}
-                  placeholder={t('notes.searchPartsPlaceholder')}
-                  placeholderTextColor="#999999"
-                  value={partsSearchQuery}
-                  onChangeText={setPartsSearchQuery}
-                  autoCorrect={false}
-                />
-                <ScrollView style={{ maxHeight: 300 }}>
-                  {getSortedParts()
-                    .filter(part => {
-                      // Каскадная фильтрация: если выбран принтер, выводим только детали, совместимые с моделью принтера
-                      if (selectedPrinterId) {
-                        const selPrinter = printers.find(p => p.id === selectedPrinterId);
-                        if (selPrinter && selPrinter.modelId) {
-                          if (part.compatibleModels && part.compatibleModels.length > 0) {
-                            if (!part.compatibleModels.includes(selPrinter.modelId)) {
-                              return false;
-                            }
-                          }
-                        }
-                      }
-                      const query = partsSearchQuery.trim().toLowerCase();
-                      if (query === '') {
-                        return part.quantity > 0;
-                      }
+                <View style={styles.modalSearchContainer}>
+                  <Ionicons name="search" size={18} color="#888" style={{ marginRight: 8 }} />
+                  <TextInput
+                    style={styles.modalSearchInput}
+                    placeholder={t('notes.searchPartsPlaceholder')}
+                    placeholderTextColor="#999999"
+                    value={partsSearchQuery}
+                    onChangeText={setPartsSearchQuery}
+                    autoCorrect={false}
+                  />
+                  {partsSearchQuery.length > 0 && (
+                    <TouchableOpacity
+                      onPress={() => setPartsSearchQuery('')}
+                      style={{ padding: 4 }}
+                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    >
+                      <Ionicons name="close-circle" size={18} color="#888" />
+                    </TouchableOpacity>
+                  )}
+                </View>
+                <ScrollView style={{ maxHeight: 350 }}>
+                  {(() => {
+                    const query = partsSearchQuery.trim().toLowerCase();
+                    const availableParts = parts.filter(p => p.quantity > 0);
+
+                    const filteredParts = availableParts.filter(part => {
+                      if (!query) return true;
                       return (
                         part.partNumber.toLowerCase().includes(query) ||
                         part.description.toLowerCase().includes(query)
                       );
-                    })
-                    .map(part => (
-                      <TouchableOpacity
-                        key={part.id}
-                        style={styles.printerModalItem}
-                        onPress={() => {
-                          setSelectedPartNumber(part.partNumber);
-                          setShowPartsPicker(false);
-                          setPartsSearchQuery('');
-                        }}
-                      >
-                        <View style={styles.modalItemContent}>
-                          <Text style={styles.printerModalItemText}>{part.partNumber}</Text>
-                          <Text style={styles.modalItemDescription}>{part.description}</Text>
-                          <Text style={styles.modalItemQuantity}>
-                            {t('notes.inStockDetails', { quantity: part.quantity, models: part.compatibleModels.map(id => models.find(m => m.id === id)?.name || id).join(', ') })}
-                          </Text>
-                        </View>
-                        {selectedPartNumber === part.partNumber && (
-                          <Text style={styles.printerModalCheck}>✓</Text>
-                        )}
-                      </TouchableOpacity>
-                    ))}
+                    });
+
+                    const selPrinter = selectedPrinterId ? printers.find(p => p.id === selectedPrinterId) : null;
+                    const modelId = selPrinter?.modelId;
+
+                    filteredParts.sort((a, b) => {
+                      if (modelId) {
+                        const aCompat = a.compatibleModels && a.compatibleModels.includes(modelId) ? 1 : 0;
+                        const bCompat = b.compatibleModels && b.compatibleModels.includes(modelId) ? 1 : 0;
+                        if (aCompat !== bCompat) return bCompat - aCompat;
+                      }
+                      return a.partNumber.localeCompare(b.partNumber);
+                    });
+
+                    if (filteredParts.length === 0) {
+                      return (
+                        <Text style={styles.modalEmptyText}>
+                          {partsSearchQuery ? t('common.notFound') : t('notes.noPartsInStock')}
+                        </Text>
+                      );
+                    }
+
+                    return filteredParts.map(part => {
+                      const selectedItem = selectedParts.find(p => p.part.id === part.id);
+                      return (
+                        <TouchableOpacity
+                          key={part.id}
+                          style={styles.printerModalItem}
+                          onPress={() => {
+                            if (selectedItem) {
+                              if (selectedItem.quantity < part.quantity) {
+                                setSelectedParts(prev =>
+                                  prev.map(p =>
+                                    p.part.id === part.id ? { ...p, quantity: p.quantity + 1 } : p
+                                  )
+                                );
+                                Alert.alert(
+                                  t('common.info'),
+                                  t('notes.partQuantityIncremented', {
+                                    partNumber: part.partNumber,
+                                    quantity: selectedItem.quantity + 1,
+                                  })
+                                );
+                              } else {
+                                Alert.alert(
+                                  t('common.warning'),
+                                  t('notes.partAlreadyAtMaxStock', {
+                                    partNumber: part.partNumber,
+                                    max: part.quantity,
+                                  })
+                                );
+                              }
+                            } else {
+                              setSelectedParts(prev => [...prev, { part, quantity: 1 }]);
+                            }
+                            setShowPartsPicker(false);
+                            setPartsSearchQuery('');
+                          }}
+                        >
+                          <View style={styles.modalItemContent}>
+                            <Text style={styles.printerModalItemText}>{part.partNumber}</Text>
+                            <Text style={styles.modalItemDescription}>{part.description}</Text>
+                            <Text style={styles.modalItemQuantity}>
+                              {t('notes.inStockCount', { count: part.quantity })}
+                            </Text>
+                          </View>
+                          {selectedItem && (
+                            <View style={{ alignItems: 'flex-end' }}>
+                              <Text style={styles.printerModalCheck}>✓</Text>
+                              <Text style={{ fontSize: 11, color: '#4CAF50', fontWeight: '600' }}>
+                                {selectedItem.quantity} {t('common.pcs')}
+                              </Text>
+                            </View>
+                          )}
+                        </TouchableOpacity>
+                      );
+                    });
+                  })()}
                 </ScrollView>
                 <TouchableOpacity
                   style={styles.printerModalCancelButton}
-                  onPress={() => { setShowPartsPicker(false); setPartsSearchQuery(''); }}
+                  onPress={() => {
+                    setShowPartsPicker(false);
+                    setPartsSearchQuery('');
+                  }}
                 >
                   <Text style={styles.printerModalCancelText}>{t('common.close')}</Text>
                 </TouchableOpacity>
@@ -848,26 +1075,41 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  keyboardAvoidingView: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   modalContent: {
     backgroundColor: 'white',
-    padding: 20,
+    padding: 16,
     borderRadius: 12,
-    width: '95%',
-    maxWidth: 400,
-    maxHeight: '90%',
+    width: '94%',
+    height: '82%',
+    alignSelf: 'center',
+    display: 'flex',
+    flexDirection: 'column',
     overflow: 'hidden',
+  },
+  modalScroll: {
+    flex: 1,
+    width: '100%',
+  },
+  modalScrollContent: {
+    paddingBottom: 20,
   },
   modalTitle: {
     fontSize: 18,
     fontWeight: 'bold',
     color: '#333',
-    marginBottom: 8,
+    marginBottom: 6,
     textAlign: 'center',
   },
   modalSubtitle: {
     fontSize: 14,
     color: '#666',
-    marginBottom: 20,
+    marginBottom: 14,
     textAlign: 'center',
   },
   inputLabel: {
@@ -893,13 +1135,27 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     marginTop: 10,
   },
+  workDescriptionInput: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 6,
+    padding: 10,
+    fontSize: 14,
+    color: '#000000',
+    backgroundColor: '#ffffff',
+    minHeight: 70,
+    textAlignVertical: 'top',
+    marginTop: 4,
+  },
   modalButtons: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: 'auto',
-    paddingTop: 15,
+    paddingTop: 12,
+    marginTop: 8,
     backgroundColor: '#fff',
-    gap: 5,
+    borderTopWidth: 1,
+    borderTopColor: '#f0f0f0',
+    gap: 6,
   },
   modalButton: {
     flex: 1,
@@ -1027,5 +1283,134 @@ const styles = StyleSheet.create({
     marginHorizontal: 15,
     marginBottom: 8,
     backgroundColor: '#ffffff',
+  },
+  partsHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 14,
+    marginBottom: 8,
+  },
+  addPartButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    backgroundColor: '#E8F5E9',
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#4CAF50',
+  },
+  addPartButtonText: {
+    fontSize: 13,
+    color: '#2E7D32',
+    fontWeight: 'bold',
+  },
+  emptyPartsContainer: {
+    padding: 12,
+    backgroundColor: '#fafafa',
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#eee',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  emptyPartsText: {
+    fontSize: 13,
+    color: '#888',
+    fontStyle: 'italic',
+  },
+  selectedPartsList: {
+    marginBottom: 10,
+  },
+  selectedPartCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 10,
+    backgroundColor: '#f9f9f9',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    marginBottom: 8,
+  },
+  selectedPartInfo: {
+    flex: 1,
+    marginRight: 8,
+  },
+  selectedPartNumber: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  selectedPartDesc: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 1,
+  },
+  selectedPartStock: {
+    fontSize: 11,
+    color: '#888',
+    marginTop: 2,
+  },
+  selectedPartControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  quantityStepBtn: {
+    width: 28,
+    height: 28,
+    backgroundColor: '#e8e8e8',
+    borderRadius: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  quantityStepBtnText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  partQtyInput: {
+    minWidth: 34,
+    height: 28,
+    borderWidth: 1,
+    borderColor: '#ccc',
+    borderRadius: 4,
+    backgroundColor: '#fff',
+    textAlign: 'center',
+    fontSize: 13,
+    fontWeight: 'bold',
+    color: '#333',
+    padding: 0,
+  },
+  removePartButton: {
+    padding: 6,
+    marginLeft: 4,
+  },
+  removePartButtonText: {
+    fontSize: 16,
+  },
+  modalSearchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: Platform.OS === 'ios' ? 8 : 4,
+    marginHorizontal: 15,
+    marginVertical: 10,
+    backgroundColor: '#f9f9f9',
+  },
+  modalSearchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: '#000000',
+    padding: 0,
+  },
+  modalEmptyText: {
+    textAlign: 'center',
+    color: '#888',
+    marginVertical: 20,
+    fontSize: 14,
   },
 });

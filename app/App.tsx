@@ -3,12 +3,13 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Platform, AppState } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
-import * as NavigationBar from 'expo-navigation-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from './src/firebase';
 import storage, { setWorkspaceId as setStorageWorkspaceId } from './src/services/storage';
+import { ensureImmersiveMode } from './src/utils/useImmersiveMode';
+
 import DashboardScreen from './src/screens/Dashboard';
 import KnowledgeBaseScreen from './src/screens/KnowledgeBaseScreen';
 import DailyReportScreen from './src/screens/DailyReportScreen';
@@ -40,15 +41,12 @@ function MainApp() {
 
   useEffect(() => {
     if (Platform.OS === 'android') {
-      // Скрываем нижнюю панель навигации
-      NavigationBar.setVisibilityAsync('hidden');
-      // Включаем поведение: при свайпе кнопки появляются на 2-3 секунды и автоматически скрываются обратно
-      NavigationBar.setBehaviorAsync('overlay-swipe');
+      // Скрываем нижнюю панель навигации и включаем overlay-swipe режим
+      ensureImmersiveMode();
 
       const subscription = AppState.addEventListener('change', (nextAppState) => {
         if (nextAppState === 'active') {
-          NavigationBar.setVisibilityAsync('hidden');
-          NavigationBar.setBehaviorAsync('overlay-swipe');
+          ensureImmersiveMode();
         }
       });
 
@@ -61,10 +59,7 @@ function MainApp() {
   useEffect(() => {
     const initializeApp = async () => {
       try {
-        if (Platform.OS === 'android') {
-          await NavigationBar.setVisibilityAsync("hidden");
-          await NavigationBar.setBehaviorAsync("overlay-swipe");
-        }
+        ensureImmersiveMode();
         
         const onboarded = await AsyncStorage.getItem('@onboarding_complete');
         setHasSeenOnboarding(onboarded === 'true');

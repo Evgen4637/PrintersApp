@@ -16,7 +16,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import storage from '../services/storage';
 import { Ionicons } from '@expo/vector-icons';
-import * as NavigationBar from 'expo-navigation-bar';
+import { ensureImmersiveMode } from '../utils/useImmersiveMode';
 import { KnowledgeBaseEntry, Part, PrinterModel, BrandItem } from '../models/types';
 import BrandSelector from '../components/BrandSelector';
 
@@ -27,12 +27,7 @@ export default function KnowledgeBaseScreen() {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
 
-  const ensureImmersiveMode = () => {
-    if (Platform.OS === 'android') {
-      NavigationBar.setVisibilityAsync('hidden');
-      NavigationBar.setBehaviorAsync('overlay-swipe');
-    }
-  };
+
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFilterBrand, setSelectedFilterBrand] = useState('Все');
   const [entries, setEntries] = useState<KnowledgeBaseEntry[]>([]);
@@ -136,7 +131,7 @@ export default function KnowledgeBaseScreen() {
   const handleCreateNewBrand = async () => {
     const trimmed = newBrandInput.trim();
     if (!trimmed) {
-      Alert.alert('Ошибка', 'Введите название бренда');
+      Alert.alert(t('common.error'), t('kb.enterBrandNameError'));
       return;
     }
     const created = await storage.addBrand(trimmed);
@@ -153,12 +148,12 @@ export default function KnowledgeBaseScreen() {
 
   const handleDeleteBrand = (brandName: string) => {
     Alert.alert(
-      'Удалить бренд?',
-      `Вы уверены, что хотите удалить бренд "${brandName}"?`,
+      t('brandSelector.deleteTitle'),
+      t('brandSelector.deleteConfirm', { brand: brandName }),
       [
-        { text: 'Отмена', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Да',
+          text: t('common.yes'),
           style: 'destructive',
           onPress: async () => {
             // Мгновенное обновление локального стейта
@@ -167,7 +162,7 @@ export default function KnowledgeBaseScreen() {
               setSelectedBrand('');
             }
             if (selectedFilterBrand.toLowerCase() === brandName.toLowerCase()) {
-              setSelectedFilterBrand('Все');
+              setSelectedFilterBrand(t('common.all'));
             }
             await storage.deleteBrand(brandName);
             const updatedBrands = await storage.getBrands();
@@ -191,7 +186,7 @@ export default function KnowledgeBaseScreen() {
 
   const handleAddNewKBModel = async () => {
     if (!newKBModelInput.trim()) {
-      Alert.alert('Ошибка', 'Введите название модели');
+      Alert.alert(t('common.error'), t('kb.enterModelNameError'));
       return;
     }
     const rawName = newKBModelInput.trim();
@@ -206,10 +201,10 @@ export default function KnowledgeBaseScreen() {
       setModels(prev => [...prev, newModel]);
       setSelectedKBModelIds(prev => [...prev, newModel.id]);
       setNewKBModelInput('');
-      Alert.alert('Успех', `Модель "${newModel.name}" создана`);
+      Alert.alert(t('common.success'), t('kb.modelCreatedSuccess', { name: newModel.name }));
     } catch (e) {
       console.error('Ошибка создания модели:', e);
-      Alert.alert('Ошибка', 'Не удалось добавить модель');
+      Alert.alert(t('common.error'), t('kb.createModelError'));
     }
   };
 
@@ -265,7 +260,7 @@ export default function KnowledgeBaseScreen() {
               await loadData();
             } catch (error) {
               console.error('Ошибка удаления записи:', error);
-              Alert.alert(t('common.error'), 'Не удалось удалить запись');
+              Alert.alert(t('common.error'), t('kb.deleteEntryError'));
             }
           },
         },
@@ -417,21 +412,21 @@ export default function KnowledgeBaseScreen() {
 
   const handleSavePartFromEditor = async () => {
     if (!partNumber.trim()) {
-      Alert.alert('Ошибка', 'Введите парт-номер');
+      Alert.alert(t('common.error'), t('parts.enterPartNumberError'));
       return;
     }
     if (!partDescription.trim()) {
-      Alert.alert('Ошибка', 'Введите наименование');
+      Alert.alert(t('common.error'), t('parts.enterNameError'));
       return;
     }
     if (selectedPartModelIds.length === 0) {
-      Alert.alert('Ошибка', 'Выберите хотя бы одну совместимую модель');
+      Alert.alert(t('common.error'), t('parts.selectCompatibleModelError'));
       return;
     }
 
     const qty = parseInt(partQuantity, 10);
     if (isNaN(qty) || qty < 0) {
-      Alert.alert('Ошибка', 'Введите корректное количество');
+      Alert.alert(t('common.error'), t('parts.enterValidQuantityError'));
       return;
     }
 
@@ -487,25 +482,25 @@ export default function KnowledgeBaseScreen() {
       setShowPartsPicker(false);
     } catch (error) {
       console.error('Ошибка сохранения детали:', error);
-      Alert.alert('Ошибка', 'Не удалось сохранить деталь');
+      Alert.alert(t('common.error'), t('parts.savePartError'));
     }
   };
 
   const handleSaveEntry = async () => {
     if (!selectedBrand.trim()) {
-      Alert.alert('Ошибка', 'Пожалуйста, выберите Бренд');
+      Alert.alert(t('common.error'), t('parts.selectBrandError'));
       return;
     }
     if (!errorCode.trim()) {
-      Alert.alert('Ошибка', 'Введите код ошибки');
+      Alert.alert(t('common.error'), t('kb.enterErrorCodeError'));
       return;
     }
     if (!title.trim()) {
-      Alert.alert('Ошибка', 'Введите краткое описание');
+      Alert.alert(t('common.error'), t('kb.enterDescriptionError'));
       return;
     }
     if (!solution.trim()) {
-      Alert.alert('Ошибка', 'Введите решение');
+      Alert.alert(t('common.error'), t('kb.enterSolutionError'));
       return;
     }
 
@@ -532,7 +527,7 @@ export default function KnowledgeBaseScreen() {
       resetForm();
     } catch (error) {
       console.error('Ошибка сохранения записи:', error);
-      Alert.alert('Ошибка', 'Не удалось сохранить запись');
+      Alert.alert(t('common.error'), t('kb.saveEntryError'));
     }
   };
 
@@ -552,21 +547,22 @@ export default function KnowledgeBaseScreen() {
   };
 
   const getLocationName = (location: {building: string; room: string} | undefined) => {
-    if (!location) return 'Не указано';
-    return `${location.building}, к. ${location.room}`;
+    if (!location) return t('common.notSpecified');
+    return `${location.building}, ${location.room}`;
   };
 
   const getFilterBrandList = () => {
     const available = getAvailableBrands();
-    return ['Все', ...available];
+    return [t('common.all'), ...available];
   };
 
   const filteredEntries = entries.filter(entry => {
     const matchesSearch =
       entry.errorCode.toLowerCase().includes(searchQuery.toLowerCase()) ||
       entry.title.toLowerCase().includes(searchQuery.toLowerCase());
+    const isAllBrand = selectedFilterBrand === 'Все' || selectedFilterBrand === t('common.all');
     const matchesBrand =
-      selectedFilterBrand === 'Все' ||
+      isAllBrand ||
       (entry.brand && entry.brand.toLowerCase() === selectedFilterBrand.toLowerCase());
     return matchesSearch && matchesBrand;
   });
@@ -574,7 +570,7 @@ export default function KnowledgeBaseScreen() {
   const renderPartStatus = (partId: string) => {
     const part = getPartById(partId);
     if (!part) {
-      return <Text style={styles.partNotAvailable}>Деталь не найдена</Text>;
+      return <Text style={styles.partNotAvailable}>{t('kb.partNotFound')}</Text>;
     }
 
     // Находим все экземпляры этой детали в разных локациях
@@ -592,7 +588,7 @@ export default function KnowledgeBaseScreen() {
           <View style={styles.partInfo}>
             <Text style={styles.partName}>{part.partNumber} - {part.description}</Text>
             <Text style={styles.partCompatible}>
-              Совместимо: {part.compatibleModels.map(id => getModelName(id)).join(', ')}
+              {t('parts.compatible', { models: part.compatibleModels.map(id => getModelName(id)).join(', ') })}
             </Text>
           </View>
           <View style={styles.partQuantityInfo}>
@@ -603,26 +599,26 @@ export default function KnowledgeBaseScreen() {
               {isAvailable ? `✓ ${totalQuantity}` : `✗ 0`}
             </Text>
             <Text style={styles.partLocation}>
-              {isExpanded ? '▲ Свернуть' : '▼ Подробнее'}
+              {isExpanded ? '▲' : '▼'}
             </Text>
           </View>
         </TouchableOpacity>
 
         {isExpanded && (
           <View style={styles.locationsBreakdown}>
-            <Text style={styles.locationsTitle}>Распределение по помещениям:</Text>
+            <Text style={styles.locationsTitle}>{t('tabHelp.rooms.title')}:</Text>
             {allPartInstances.length === 0 ? (
-              <Text style={styles.noStockText}>Нет в наличии</Text>
+              <Text style={styles.noStockText}>{t('kb.outOfStock')}</Text>
             ) : (
               allPartInstances.map((instance, idx) => (
                 <View key={idx} style={styles.locationRow}>
-                  <Text style={styles.locationBuilding}>{instance.location?.building || 'Не указан'}</Text>
-                  <Text style={styles.locationRoom}>к. {instance.location?.room || '?'}</Text>
+                  <Text style={styles.locationBuilding}>{instance.location?.building || t('common.notSpecified')}</Text>
+                  <Text style={styles.locationRoom}>{instance.location?.room || '?'}</Text>
                   <Text style={[
                     styles.locationQuantity,
                     instance.quantity > 0 ? styles.quantityPositive : styles.quantityZero
                   ]}>
-                    {instance.quantity} шт.
+                    {t('kb.inStockCount', { count: instance.quantity })}
                   </Text>
                 </View>
               ))
@@ -636,7 +632,7 @@ export default function KnowledgeBaseScreen() {
   if (loading) {
     return (
       <View style={styles.container}>
-        <Text>Загрузка...</Text>
+        <Text>{t('common.loading')}</Text>
       </View>
     );
   }
@@ -679,7 +675,7 @@ export default function KnowledgeBaseScreen() {
           <View style={styles.brandFilterContainer}>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.brandChipsScroll}>
               {getFilterBrandList().map(brandName => {
-                const isSelected = selectedFilterBrand === brandName;
+                const isSelected = selectedFilterBrand === brandName || (brandName === t('common.all') && (selectedFilterBrand === 'Все' || selectedFilterBrand === t('common.all')));
                 return (
                   <TouchableOpacity
                     key={brandName}
@@ -693,7 +689,7 @@ export default function KnowledgeBaseScreen() {
                       styles.brandFilterChipText,
                       isSelected && styles.brandFilterChipTextSelected
                     ]}>
-                      {brandName === 'Все' ? t('common.all') : brandName}
+                      {brandName}
                     </Text>
                   </TouchableOpacity>
                 );
@@ -740,7 +736,7 @@ export default function KnowledgeBaseScreen() {
 
                   {entry.compatibleModels && entry.compatibleModels.length > 0 && (
                     <View style={styles.solutionSection}>
-                      <Text style={styles.sectionLabel}>Совместимые модели:</Text>
+                      <Text style={styles.sectionLabel}>{t('kb.compatibleModelsLabel')}</Text>
                       <Text style={styles.solutionText}>
                         {entry.compatibleModels.map(id => getModelName(id)).join(', ')}
                       </Text>
@@ -748,13 +744,13 @@ export default function KnowledgeBaseScreen() {
                   )}
                   
                   <View style={styles.solutionSection}>
-                    <Text style={styles.sectionLabel}>Решение:</Text>
+                    <Text style={styles.sectionLabel}>{t('kb.solutionTitle')}</Text>
                     <Text style={styles.solutionText}>{entry.solution}</Text>
                   </View>
 
                   {entry.steps && entry.steps.length > 0 && (
                     <View style={styles.stepsSection}>
-                      <Text style={styles.sectionLabel}>Шаги:</Text>
+                      <Text style={styles.sectionLabel}>{t('kb.stepsTitle')}</Text>
                       {entry.steps.map((step, index) => (
                         <Text key={index} style={styles.stepsSectionText}>
                           {index + 1}. {step}
@@ -764,17 +760,17 @@ export default function KnowledgeBaseScreen() {
                   )}
 
                   <View style={styles.partsSection}>
-                    <Text style={styles.sectionLabel}>Необходимые детали:</Text>
+                    <Text style={styles.sectionLabel}>{t('kb.relatedPartsTitle')}</Text>
                     {(() => {
                       const validParts = (entry.relatedParts || [])
                         .map(id => parts.find(p => p.id === id))
                         .filter((p): p is Part => Boolean(p));
 
                       if (!entry.relatedParts || entry.relatedParts.length === 0) {
-                        return <Text style={styles.noPartsText}>Не указаны</Text>;
+                        return <Text style={styles.noPartsText}>{t('common.notSpecified')}</Text>;
                       }
                       if (validParts.length === 0) {
-                        return <Text style={styles.noPartsText}>Связанные детали были удалены со склада</Text>;
+                        return <Text style={styles.noPartsText}>{t('common.notFound')}</Text>;
                       }
                       return validParts.map(part => (
                         <View key={part.id}>
@@ -962,9 +958,7 @@ export default function KnowledgeBaseScreen() {
                     <Text style={styles.disabledSelectorText}>{t('kb.selectBrandFirstLocked')}</Text>
                   ) : selectedPartIds.length === 0 ? (
                     <Text style={[styles.noPartsText, { color: '#999', fontStyle: 'italic' }]}>
-                      {selectedKBModelIds.length > 0
-                        ? 'Нажмите для выбора деталей для выбранных моделей...'
-                        : `Нажмите для выбора деталей бренда ${selectedBrand}...`}
+                      {t('notes.clickToSelectPart')}
                     </Text>
                   ) : (
                     <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
@@ -974,7 +968,7 @@ export default function KnowledgeBaseScreen() {
                         return (
                           <View key={partId} style={styles.selectedPartChip}>
                             <Text style={styles.selectedPartText}>
-                              {part.partNumber} ({part.quantity} шт.)
+                              {part.partNumber} ({part.quantity} {t('common.pcs')})
                             </Text>
                             <TouchableOpacity
                               style={styles.removePartButton}
@@ -1217,7 +1211,7 @@ export default function KnowledgeBaseScreen() {
                   >
                     <Text style={styles.pickerButtonText}>
                       {selectedPartLocation
-                        ? `${selectedPartLocation.building}, к. ${selectedPartLocation.room}`
+                        ? `${selectedPartLocation.building}, ${selectedPartLocation.room}`
                         : t('printers.selectRoom')}
                     </Text>
                   </TouchableOpacity>
@@ -1285,7 +1279,7 @@ export default function KnowledgeBaseScreen() {
                       }}
                     >
                       <Text style={styles.modalItemText}>
-                        {loc.building}, к. {loc.room}
+                        {loc.building}, {loc.room}
                       </Text>
                       {selectedPartLocation && 
                         selectedPartLocation.building === loc.building && 

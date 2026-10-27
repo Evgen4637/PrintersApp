@@ -680,9 +680,10 @@ class StorageService {
       }
 
       if (log.partsDeducted && log.partsDeducted.length > 0) {
-        for (const pItem of log.partsDeducted) {
+        for (let pIdx = 0; pIdx < log.partsDeducted.length; pIdx++) {
+          const pItem = log.partsDeducted[pIdx];
           const logAction: DailyAction = {
-            id: `${log.id}_${pItem.partId}`,
+            id: `${log.id}_${pItem.partId}_${pIdx}`,
             noteId: log.noteId,
             partId: pItem.partId,
             partName: pItem.partName || 'Деталь',
@@ -693,7 +694,7 @@ class StorageService {
             printerName,
           };
           const hasDuplicate = entryToUse.actions.some(a =>
-            a.timestamp === log.date && (a.partId === pItem.partId || a.partName === logAction.partName)
+            a.id === logAction.id || (a.timestamp === log.date && a.partId === pItem.partId && a.partName === logAction.partName)
           );
           if (!hasDuplicate) {
             entryToUse.actions.push(logAction);
@@ -919,13 +920,28 @@ class StorageService {
         const logs = await this.getPrinterLogs();
         const targetLog = logs.find(log =>
           log.id === actionId ||
+          actionId.startsWith(`${log.id}_`) ||
           log.date === actionId ||
           String(log.date) === actionId
         );
 
         if (targetLog) {
           console.log(`[storage.ts:deleteDailyAction] Action found in PrinterLog:`, targetLog);
-          if (targetLog.partId && targetLog.quantityDeducted && targetLog.quantityDeducted > 0) {
+          if (targetLog.partsDeducted && targetLog.partsDeducted.length > 0) {
+            try {
+              const partsList = await this.getParts();
+              for (const pItem of targetLog.partsDeducted) {
+                const part = partsList.find(p => p.id === pItem.partId);
+                if (part) {
+                  const restoredQty = part.quantity + (pItem.quantity || 1);
+                  console.log(`[storage.ts:deleteDailyAction] Restocking part ${part.id}: newQty=${restoredQty}`);
+                  await this._update<Part>(STORAGE_KEYS.PARTS, part.id, { quantity: restoredQty });
+                }
+              }
+            } catch (restockErr) {
+              console.warn('[storage.ts:deleteDailyAction] Error restocking parts from PrinterLog:', restockErr);
+            }
+          } else if (targetLog.partId && targetLog.quantityDeducted && targetLog.quantityDeducted > 0) {
             try {
               const partsList = await this.getParts();
               const part = partsList.find(p => p.id === targetLog.partId);

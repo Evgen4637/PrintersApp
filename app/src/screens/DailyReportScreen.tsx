@@ -268,7 +268,7 @@ export default function DailyReportScreen() {
     const titleText = isTaskEntry ? action.description!.trim() : 'Обслуживание';
 
     return (
-      <View key={action.timestamp || actionIndex} style={styles.actionItem}>
+      <View key={`${action.id || action.timestamp || 'action'}_${actionIndex}`} style={styles.actionItem}>
         <View style={styles.actionHeader}>
           <Text style={styles.actionType}>{titleText}</Text>
           <View style={styles.actionRightHeader}>
@@ -298,7 +298,7 @@ export default function DailyReportScreen() {
     );
   };
 
-  const renderPrinterGroup = (printerName: string, entries: DailyReportEntry[]) => {
+  const renderPrinterGroup = (printerName: string, entries: DailyReportEntry[], groupIndex: number = 0) => {
     const allActionsWithIndices: { action: DailyAction; originalIndex: number }[] = [];
     entries.forEach(entry => {
       entry.actions.forEach((action, idx) => {
@@ -309,13 +309,13 @@ export default function DailyReportScreen() {
     allActionsWithIndices.sort((a, b) => new Date(b.action.timestamp).getTime() - new Date(a.action.timestamp).getTime());
 
     return (
-      <View key={printerName} style={styles.printerGroup}>
+      <View key={`${printerName}_${groupIndex}`} style={styles.printerGroup}>
         <View style={styles.printerGroupHeader}>
           <Text style={styles.printerGroupName}>{printerName}</Text>
           <Text style={styles.actionsCount}>{t('dailyReport.actionsCount', { count: allActionsWithIndices.length })}</Text>
         </View>
-        {allActionsWithIndices.map(({ action, originalIndex }) =>
-          renderAction(action, originalIndex, printerName)
+        {allActionsWithIndices.map(({ action }, index) =>
+          renderAction(action, index, printerName)
         )}
       </View>
     );
@@ -371,8 +371,8 @@ export default function DailyReportScreen() {
             <Text style={styles.emptyText}>{t('common.emptyList')}</Text>
           </View>
         ) : (
-          Array.from(currentReport.entries()).map(([printerName, entries]) =>
-            renderPrinterGroup(printerName, entries)
+          Array.from(currentReport.entries()).map(([printerName, entries], groupIndex) =>
+            renderPrinterGroup(printerName, entries, groupIndex)
           )
         )}
       </ScrollView>
@@ -390,7 +390,7 @@ export default function DailyReportScreen() {
       }
     };
 
-    const renderHistoryDate = (date: string) => {
+    const renderHistoryDate = (date: string, dateIndex: number) => {
       const dayHistory = filteredHistory.filter(h => h.date === date);
       const totalActions = dayHistory.reduce(
         (sum, h) => sum + h.report.entries.reduce((entrySum, entry) => entrySum + entry.actions.length, 0),
@@ -398,7 +398,7 @@ export default function DailyReportScreen() {
       );
 
       return (
-        <View key={date} style={styles.historyDateGroup}>
+        <View key={`${date}_${dateIndex}`} style={styles.historyDateGroup}>
           <TouchableOpacity
             style={[
               styles.historyDateHeader,
@@ -419,16 +419,16 @@ export default function DailyReportScreen() {
 
           {selectedHistoryDate === date && (
             <View style={styles.historyDetails}>
-              {dayHistory.map(historyItem => (
-                <View key={historyItem.id} style={styles.historyItem}>
+              {dayHistory.map((historyItem, hIdx) => (
+                <View key={`${historyItem.id || 'hist'}_${hIdx}`} style={styles.historyItem}>
                   <Text style={styles.historyItemTitle}>
                     Завершено: {new Date(historyItem.completedAt).toLocaleTimeString('ru-RU')}
                   </Text>
-                  {historyItem.report.entries.map(entry => (
-                    <View key={entry.printerName} style={styles.historyPrinterEntry}>
+                  {historyItem.report.entries.map((entry, eIdx) => (
+                    <View key={`${entry.printerName || 'entry'}_${eIdx}`} style={styles.historyPrinterEntry}>
                       <Text style={styles.historyPrinterName}>{entry.printerName}</Text>
                       {entry.actions.map((action, idx) => (
-                        <View key={idx} style={styles.historyActionItem}>
+                        <View key={`${action.id || action.timestamp || 'act'}_${idx}`} style={styles.historyActionItem}>
                           <Text style={styles.historyActionText}>
                             {action.description || 'Обслуживание'} ({action.partName && action.partName !== 'без списания' ? `${action.partName} x${action.quantity}` : t('dailyReport.noWriteOff')})
                           </Text>
@@ -463,7 +463,7 @@ export default function DailyReportScreen() {
           </View>
         ) : (
           <ScrollView contentContainerStyle={[styles.historyList, { paddingBottom: 100 }]}>
-            {uniqueDates.map(date => renderHistoryDate(date))}
+            {uniqueDates.map((date, dateIndex) => renderHistoryDate(date, dateIndex))}
           </ScrollView>
         )}
       </>

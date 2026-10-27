@@ -532,127 +532,130 @@ export default function PrintersScreen({ initialPrinterId }: { initialPrinterId?
     return (
       <KeyboardAvoidingView 
         style={[styles.container, { paddingTop: insets.top }]}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        <ScrollView style={styles.formScroll} keyboardShouldPersistTaps="handled">
-          <View style={styles.header}>
-            <Text style={styles.headerTitle}>{mode === 'add' ? t('printers.addTitle') : t('printers.editTitle')}</Text>
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>{mode === 'add' ? t('printers.addTitle') : t('printers.editTitle')}</Text>
+        </View>
+
+        <ScrollView 
+          style={styles.formScroll} 
+          contentContainerStyle={{ padding: 15, paddingBottom: 20 }}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>{t('printers.nameLabel')}</Text>
+            <TextInput
+              style={styles.input}
+              value={name}
+              onChangeText={setName}
+              placeholder="PRN001"
+              placeholderTextColor="#999999"
+            />
           </View>
 
-          <View style={styles.form}>
-            <View style={styles.formGroup}>
-              <Text style={styles.label}>{t('printers.nameLabel')}</Text>
-              <TextInput
-                style={styles.input}
-                value={name}
-                onChangeText={setName}
-                placeholder="PRN001"
-                placeholderTextColor="#999999"
-              />
-            </View>
+          <BrandSelector
+            selectedBrand={selectedBrand}
+            onSelectBrand={setSelectedBrand}
+          />
 
-            <BrandSelector
-              selectedBrand={selectedBrand}
-              onSelectBrand={setSelectedBrand}
-            />
-
-            <View style={styles.formGroup}>
-              <Text style={styles.label}>{t('printers.modelLabel')}</Text>
-              <View style={styles.pickerRow}>
-                <TouchableOpacity
-                  style={styles.pickerButton}
-                  onPress={handleOpenModelPicker}
-                >
-                  <Text style={styles.pickerButtonText}>
-                    {models.find(m => m.id === selectedModelId)?.name || t('printers.selectModel')}
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.manageModelsButton}
-                  onPress={handleOpenModelManager}
-                >
-                  <Text style={styles.manageModelsButtonText}>✏️</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            <View style={styles.formGroup}>
-              <Text style={styles.label}>{t('printers.serialLabel')}</Text>
-              <TextInput
-                style={styles.input}
-                value={serialNumber}
-                onChangeText={setSerialNumber}
-                placeholder={t('common.optional')}
-                placeholderTextColor="#999999"
-              />
-            </View>
-
-            <View style={styles.formGroup}>
-              <Text style={styles.label}>{t('printers.macLabel')}</Text>
-              <TextInput
-                style={styles.input}
-                value={macAddress}
-                onChangeText={setMacAddress}
-                placeholder={t('common.optional')}
-                placeholderTextColor="#999999"
-                autoCapitalize="none"
-              />
-            </View>
-
-            <View style={styles.formGroup}>
-              <Text style={styles.label}>{t('printers.ipLabel')}</Text>
-              <TextInput
-                style={styles.input}
-                value={ipAddress}
-                onChangeText={setIpAddress}
-                placeholder={t('common.optional')}
-                placeholderTextColor="#999999"
-                keyboardType="numeric"
-              />
-            </View>
-
-            <View style={styles.formGroup}>
-              <Text style={styles.label}>{t('printers.locationLabel')}</Text>
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>{t('printers.modelLabel')}</Text>
+            <View style={styles.pickerRow}>
               <TouchableOpacity
                 style={styles.pickerButton}
-                onPress={handleOpenLocationPicker}
+                onPress={handleOpenModelPicker}
               >
                 <Text style={styles.pickerButtonText}>
-                  {selectedLocation
-                    ? `${selectedLocation.building}, ${selectedLocation.room}`
-                    : t('printers.selectRoom')}
+                  {models.find(m => m.id === selectedModelId)?.name || t('printers.selectModel')}
                 </Text>
               </TouchableOpacity>
-              <Text style={styles.helpText}>
-                {t('printers.locationHelp')}
-              </Text>
-            </View>
-
-            <View style={[styles.formGroup, styles.switchRow]}>
-              <View style={{ flex: 1, marginRight: 12 }}>
-                <Text style={[styles.label, { marginBottom: 2 }]}>{t('printers.closedNetwork')}</Text>
-                <Text style={[styles.helpText, { marginTop: 0 }]}>
-                  {isClosedNetwork ? t('printers.closedNetwork') : t('printers.openNetwork')}
-                </Text>
-              </View>
-              <Switch
-                value={isClosedNetwork}
-                onValueChange={setIsClosedNetwork}
-                trackColor={{ false: '#e0e0e0', true: '#90CAF9' }}
-                thumbColor={isClosedNetwork ? '#1976D2' : '#f4f3f4'}
-              />
-            </View>
-
-            <View style={styles.buttonRow}>
-              <TouchableOpacity style={[styles.button, styles.cancelButton]} onPress={handleCancel}>
-                <Text style={styles.cancelButtonText}>{t('common.cancel')}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.button, styles.saveButton]} onPress={handleSavePrinter}>
-                <Text style={styles.saveButtonText}>{t('common.save')}</Text>
+              <TouchableOpacity
+                style={styles.manageModelsButton}
+                onPress={handleOpenModelManager}
+              >
+                <Text style={styles.manageModelsButtonText}>✏️</Text>
               </TouchableOpacity>
             </View>
           </View>
+
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>{t('printers.serialLabel')}</Text>
+            <TextInput
+              style={styles.input}
+              value={serialNumber}
+              onChangeText={setSerialNumber}
+              placeholder={t('common.optional')}
+              placeholderTextColor="#999999"
+            />
+          </View>
+
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>{t('printers.macLabel')}</Text>
+            <TextInput
+              style={styles.input}
+              value={macAddress}
+              onChangeText={setMacAddress}
+              placeholder={t('common.optional')}
+              placeholderTextColor="#999999"
+              autoCapitalize="none"
+            />
+          </View>
+
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>{t('printers.ipLabel')}</Text>
+            <TextInput
+              style={styles.input}
+              value={ipAddress}
+              onChangeText={setIpAddress}
+              placeholder={t('common.optional')}
+              placeholderTextColor="#999999"
+              keyboardType="numeric"
+            />
+          </View>
+
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>{t('printers.locationLabel')}</Text>
+            <TouchableOpacity
+              style={styles.pickerButton}
+              onPress={handleOpenLocationPicker}
+            >
+              <Text style={styles.pickerButtonText}>
+                {selectedLocation
+                  ? `${selectedLocation.building}, ${selectedLocation.room}`
+                  : t('printers.selectRoom')}
+              </Text>
+            </TouchableOpacity>
+            <Text style={styles.helpText}>
+              {t('printers.locationHelp')}
+            </Text>
+          </View>
+
+          <View style={[styles.formGroup, styles.switchRow]}>
+            <View style={{ flex: 1, marginRight: 12 }}>
+              <Text style={[styles.label, { marginBottom: 2 }]}>{t('printers.closedNetwork')}</Text>
+              <Text style={[styles.helpText, { marginTop: 0 }]}>
+                {isClosedNetwork ? t('printers.closedNetwork') : t('printers.openNetwork')}
+              </Text>
+            </View>
+            <Switch
+              value={isClosedNetwork}
+              onValueChange={setIsClosedNetwork}
+              trackColor={{ false: '#e0e0e0', true: '#90CAF9' }}
+              thumbColor={isClosedNetwork ? '#1976D2' : '#f4f3f4'}
+            />
+          </View>
         </ScrollView>
+
+        <View style={[styles.buttonRow, { paddingHorizontal: 15, paddingBottom: Math.max(insets.bottom, 16), paddingTop: 10, marginTop: 0, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#eee' }]}>
+          <TouchableOpacity style={[styles.button, styles.cancelButton]} onPress={handleCancel}>
+            <Text style={styles.cancelButtonText}>{t('common.cancel')}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.button, styles.saveButton]} onPress={handleSavePrinter}>
+            <Text style={styles.saveButtonText}>{t('common.save')}</Text>
+          </TouchableOpacity>
+        </View>
 
 
 
@@ -824,29 +827,27 @@ export default function PrintersScreen({ initialPrinterId }: { initialPrinterId?
             ensureImmersiveMode();
           }}
         >
-          <View style={styles.modalOverlay}>
-            <KeyboardAvoidingView
-              behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-              style={{ width: '100%', maxHeight: '90%', justifyContent: 'flex-end' }}
-            >
-              <View style={[styles.modalContent, styles.modelManagerContent]}>
-                <View style={styles.modalHeader}>
-                  <Text style={styles.modalTitle}>{t('printers.modelsManagerTitle')}</Text>
-                  {modelManagerMode === 'list' && (
-                    <TouchableOpacity style={styles.addModelButton} onPress={handleAddModel}>
-                      <Text style={styles.addModelButtonText}>{t('printers.addModelButton')}</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
+          <View style={[styles.modalOverlay, { justifyContent: 'center', alignItems: 'center' }]}>
+            <View style={[styles.modalContent, styles.modelManagerContent]}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>{t('printers.modelsManagerTitle')}</Text>
+                {modelManagerMode === 'list' && (
+                  <TouchableOpacity style={styles.addModelButton} onPress={handleAddModel}>
+                    <Text style={styles.addModelButtonText}>{t('printers.addModelButton')}</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
 
-                {modelManagerMode === 'list' ? (
-                  models.length === 0 ? (
-                    <Text style={styles.modalEmptyText}>{t('printers.noModels')}</Text>
+              {modelManagerMode === 'list' ? (
+                <>
+                  {models.length === 0 ? (
+                    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+                      <Text style={styles.modalEmptyText}>{t('printers.noModels')}</Text>
+                    </View>
                   ) : (
                     <ScrollView
-                      style={styles.modalScroll}
-                      contentContainerStyle={{ flexGrow: 0 }}
-                      scrollEnabled={models.length > 6}
+                      style={{ flex: 1, width: '100%' }}
+                      contentContainerStyle={{ paddingHorizontal: 15, paddingVertical: 10, paddingBottom: 40 }}
                       keyboardShouldPersistTaps="handled"
                     >
                       {models.map(model => (
@@ -878,62 +879,10 @@ export default function PrintersScreen({ initialPrinterId }: { initialPrinterId?
                         </TouchableOpacity>
                       ))}
                     </ScrollView>
-                  )
-                ) : (
-                  <KeyboardAvoidingView
-                    behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-                    style={{ flexShrink: 1 }}
-                  >
-                    <ScrollView 
-                      style={styles.modalScroll} 
-                      contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 20) + 140 }}
-                      keyboardShouldPersistTaps="handled"
-                    >
-                      <View style={styles.modelForm}>
-                        <View style={styles.formGroup}>
-                          <Text style={styles.label}>{t('printers.modelNameLabel')}</Text>
-                          <TextInput
-                            style={styles.input}
-                            value={modelName}
-                            onChangeText={setModelName}
-                            placeholder={t('printers.modelNamePlaceholder')}
-                            placeholderTextColor="#999999"
-                            autoCapitalize="none"
-                            autoCorrect={false}
-                          />
-                        </View>
+                  )}
 
-                        <View style={styles.formGroup}>
-                          <Text style={styles.label}>{t('printers.modelDescriptionLabel')}</Text>
-                          <TextInput
-                            style={[styles.input, styles.textArea]}
-                            value={modelDescription}
-                            onChangeText={setModelDescription}
-                            placeholder={t('printers.modelDescriptionPlaceholder')}
-                            placeholderTextColor="#999999"
-                            multiline
-                            numberOfLines={3}
-                            autoCapitalize="sentences"
-                            autoCorrect={false}
-                          />
-                        </View>
-
-                        <View style={[styles.buttonRow, { paddingBottom: Math.max(insets.bottom, 20) }]}>
-                          <TouchableOpacity style={[styles.button, styles.cancelButton]} onPress={handleCancelModel}>
-                            <Text style={styles.cancelButtonText}>{t('common.cancel')}</Text>
-                          </TouchableOpacity>
-                          <TouchableOpacity style={[styles.button, styles.saveButton]} onPress={handleSaveModel}>
-                            <Text style={styles.saveButtonText}>{t('common.save')}</Text>
-                          </TouchableOpacity>
-                        </View>
-                      </View>
-                    </ScrollView>
-                  </KeyboardAvoidingView>
-                )}
-
-                {modelManagerMode === 'list' && (
                   <TouchableOpacity
-                    style={[styles.modalCancelButton, { paddingBottom: Math.max(insets.bottom, 16) }]}
+                    style={[styles.modalCancelButton, { borderTopWidth: 1, borderTopColor: '#eee' }]}
                     onPress={() => {
                       Keyboard.dismiss();
                       setShowModelManager(false);
@@ -941,9 +890,55 @@ export default function PrintersScreen({ initialPrinterId }: { initialPrinterId?
                   >
                     <Text style={styles.modalCancelText}>{t('common.close')}</Text>
                   </TouchableOpacity>
-                )}
-              </View>
-            </KeyboardAvoidingView>
+                </>
+              ) : (
+                <>
+                  <ScrollView 
+                    style={{ flex: 1, width: '100%' }} 
+                    contentContainerStyle={{ padding: 15, paddingBottom: 40 }}
+                    keyboardShouldPersistTaps="handled"
+                    showsVerticalScrollIndicator={false}
+                  >
+                    <View style={styles.formGroup}>
+                      <Text style={styles.label}>{t('printers.modelNameLabel')}</Text>
+                      <TextInput
+                        style={styles.input}
+                        value={modelName}
+                        onChangeText={setModelName}
+                        placeholder={t('printers.modelNamePlaceholder')}
+                        placeholderTextColor="#999999"
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                      />
+                    </View>
+
+                    <View style={styles.formGroup}>
+                      <Text style={styles.label}>{t('printers.modelDescriptionLabel')}</Text>
+                      <TextInput
+                        style={[styles.input, styles.textArea]}
+                        value={modelDescription}
+                        onChangeText={setModelDescription}
+                        placeholder={t('printers.modelDescriptionPlaceholder')}
+                        placeholderTextColor="#999999"
+                        multiline
+                        numberOfLines={3}
+                        autoCapitalize="sentences"
+                        autoCorrect={false}
+                      />
+                    </View>
+                  </ScrollView>
+
+                  <View style={[styles.buttonRow, { paddingHorizontal: 15, paddingBottom: 15, paddingTop: 10, marginTop: 0, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#eee' }]}>
+                    <TouchableOpacity style={[styles.button, styles.cancelButton]} onPress={handleCancelModel}>
+                      <Text style={styles.cancelButtonText}>{t('common.cancel')}</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[styles.button, styles.saveButton]} onPress={handleSaveModel}>
+                      <Text style={styles.saveButtonText}>{t('common.save')}</Text>
+                    </TouchableOpacity>
+                  </View>
+                </>
+              )}
+            </View>
           </View>
         </Modal>
       </KeyboardAvoidingView>
@@ -1147,29 +1142,27 @@ export default function PrintersScreen({ initialPrinterId }: { initialPrinterId?
           ensureImmersiveMode();
         }}
       >
-        <View style={styles.modalOverlay}>
-          <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-            style={{ width: '100%', maxHeight: '90%', justifyContent: 'flex-end' }}
-          >
-            <View style={[styles.modalContent, styles.modelManagerContent]}>
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>{t('printers.modelsManagerTitle')}</Text>
-                {modelManagerMode === 'list' && (
-                  <TouchableOpacity style={styles.addModelButton} onPress={handleAddModel}>
-                    <Text style={styles.addModelButtonText}>{t('printers.addModelButton')}</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
+        <View style={[styles.modalOverlay, { justifyContent: 'center', alignItems: 'center' }]}>
+          <View style={[styles.modalContent, styles.modelManagerContent]}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>{t('printers.modelsManagerTitle')}</Text>
+              {modelManagerMode === 'list' && (
+                <TouchableOpacity style={styles.addModelButton} onPress={handleAddModel}>
+                  <Text style={styles.addModelButtonText}>{t('printers.addModelButton')}</Text>
+                </TouchableOpacity>
+              )}
+            </View>
 
-              {modelManagerMode === 'list' ? (
-                models.length === 0 ? (
-                  <Text style={styles.modalEmptyText}>{t('printers.noModels')}</Text>
+            {modelManagerMode === 'list' ? (
+              <>
+                {models.length === 0 ? (
+                  <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+                    <Text style={styles.modalEmptyText}>{t('printers.noModels')}</Text>
+                  </View>
                 ) : (
                   <ScrollView
-                    style={styles.modalScroll}
-                    contentContainerStyle={{ flexGrow: 0 }}
-                    scrollEnabled={models.length > 6}
+                    style={{ flex: 1, width: '100%' }}
+                    contentContainerStyle={{ paddingHorizontal: 15, paddingVertical: 10, paddingBottom: 40 }}
                     keyboardShouldPersistTaps="handled"
                   >
                     {models.map(model => (
@@ -1201,62 +1194,10 @@ export default function PrintersScreen({ initialPrinterId }: { initialPrinterId?
                       </TouchableOpacity>
                     ))}
                   </ScrollView>
-                )
-              ) : (
-                <KeyboardAvoidingView
-                  behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-                  style={{ flexShrink: 1 }}
-                >
-                  <ScrollView 
-                    style={styles.modalScroll} 
-                    contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 20) + 140 }}
-                    keyboardShouldPersistTaps="handled"
-                  >
-                    <View style={styles.modelForm}>
-                      <View style={styles.formGroup}>
-                        <Text style={styles.label}>{t('printers.modelNameLabel')}</Text>
-                        <TextInput
-                          style={styles.input}
-                          value={modelName}
-                          onChangeText={setModelName}
-                          placeholder={t('printers.modelNamePlaceholder')}
-                          placeholderTextColor="#999999"
-                          autoCapitalize="none"
-                          autoCorrect={false}
-                        />
-                      </View>
+                )}
 
-                      <View style={styles.formGroup}>
-                        <Text style={styles.label}>{t('printers.modelDescriptionLabel')}</Text>
-                        <TextInput
-                          style={[styles.input, styles.textArea]}
-                          value={modelDescription}
-                          onChangeText={setModelDescription}
-                          placeholder={t('printers.modelDescriptionPlaceholder')}
-                          placeholderTextColor="#999999"
-                          multiline
-                          numberOfLines={3}
-                          autoCapitalize="sentences"
-                          autoCorrect={false}
-                        />
-                      </View>
-
-                      <View style={[styles.buttonRow, { paddingBottom: Math.max(insets.bottom, 20) }]}>
-                        <TouchableOpacity style={[styles.button, styles.cancelButton]} onPress={handleCancelModel}>
-                          <Text style={styles.cancelButtonText}>{t('common.cancel')}</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity style={[styles.button, styles.saveButton]} onPress={handleSaveModel}>
-                          <Text style={styles.saveButtonText}>{t('common.save')}</Text>
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  </ScrollView>
-                </KeyboardAvoidingView>
-              )}
-
-              {modelManagerMode === 'list' && (
                 <TouchableOpacity
-                  style={[styles.modalCancelButton, { paddingBottom: Math.max(insets.bottom, 16) }]}
+                  style={[styles.modalCancelButton, { borderTopWidth: 1, borderTopColor: '#eee' }]}
                   onPress={() => {
                     Keyboard.dismiss();
                     setShowModelManager(false);
@@ -1264,9 +1205,55 @@ export default function PrintersScreen({ initialPrinterId }: { initialPrinterId?
                 >
                   <Text style={styles.modalCancelText}>{t('common.close')}</Text>
                 </TouchableOpacity>
-              )}
-            </View>
-          </KeyboardAvoidingView>
+              </>
+            ) : (
+              <>
+                <ScrollView 
+                  style={{ flex: 1, width: '100%' }} 
+                  contentContainerStyle={{ padding: 15, paddingBottom: 40 }}
+                  keyboardShouldPersistTaps="handled"
+                  showsVerticalScrollIndicator={false}
+                >
+                  <View style={styles.formGroup}>
+                    <Text style={styles.label}>{t('printers.modelNameLabel')}</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={modelName}
+                      onChangeText={setModelName}
+                      placeholder={t('printers.modelNamePlaceholder')}
+                      placeholderTextColor="#999999"
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                    />
+                  </View>
+
+                  <View style={styles.formGroup}>
+                    <Text style={styles.label}>{t('printers.modelDescriptionLabel')}</Text>
+                    <TextInput
+                      style={[styles.input, styles.textArea]}
+                      value={modelDescription}
+                      onChangeText={setModelDescription}
+                      placeholder={t('printers.modelDescriptionPlaceholder')}
+                      placeholderTextColor="#999999"
+                      multiline
+                      numberOfLines={3}
+                      autoCapitalize="sentences"
+                      autoCorrect={false}
+                    />
+                  </View>
+                </ScrollView>
+
+                <View style={[styles.buttonRow, { paddingHorizontal: 15, paddingBottom: 15, paddingTop: 10, marginTop: 0, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#eee' }]}>
+                  <TouchableOpacity style={[styles.button, styles.cancelButton]} onPress={handleCancelModel}>
+                    <Text style={styles.cancelButtonText}>{t('common.cancel')}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[styles.button, styles.saveButton]} onPress={handleSaveModel}>
+                    <Text style={styles.saveButtonText}>{t('common.save')}</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+          </View>
         </View>
       </Modal>
 
@@ -2138,8 +2125,22 @@ const styles = StyleSheet.create({
   modelPickerScroll: {
     maxHeight: Dimensions.get('window').height * 0.65,
   },
+  keyboardAvoidingView: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   modelManagerContent: {
-    maxHeight: Dimensions.get('window').height * 0.85,
+    backgroundColor: 'white',
+    borderRadius: 12,
+    width: '90%',
+    height: '80%',
+    maxHeight: '85%',
+    alignSelf: 'center',
+    display: 'flex',
+    flexDirection: 'column',
+    overflow: 'hidden',
   },
   modalHeader: {
     padding: 20,

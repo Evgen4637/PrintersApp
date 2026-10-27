@@ -236,7 +236,7 @@ export default function DailyReportScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              const actionId = action.id || action.timestamp;
+              const actionId = action.id ? String(action.id) : (action.timestamp || '');
               console.log('[DailyReportScreen] Deleting daily action with actionId:', actionId);
               const actionDate = action.timestamp 
                 ? new Date(action.timestamp).toISOString().split('T')[0]

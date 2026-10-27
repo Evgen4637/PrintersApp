@@ -904,8 +904,13 @@ class StorageService {
                   (n.completed && foundAction!.description && n.title.trim().toLowerCase() === foundAction!.description.trim().toLowerCase())
                 );
                 if (targetNote) {
-                  console.log(`[storage.ts:deleteDailyAction] Resetting task ${targetNote.id} ("${targetNote.title}") to completed=false`);
-                  await this._updateNoteLocal(targetNote.id, { completed: false });
+                  const hasOtherActionsForNote = report.entries.some(e =>
+                    e.actions.some(a => a.noteId && a.noteId === targetNote.id)
+                  );
+                  if (!hasOtherActionsForNote) {
+                    console.log(`[storage.ts:deleteDailyAction] Resetting task ${targetNote.id} ("${targetNote.title}") to completed=false`);
+                    await this._updateNoteLocal(targetNote.id, { completed: false });
+                  }
                 }
               } catch (noteErr) {
                 console.warn('[storage.ts:deleteDailyAction] Could not reset task completed status:', noteErr);
@@ -927,34 +932,111 @@ class StorageService {
 
         if (targetLog) {
           console.log(`[storage.ts:deleteDailyAction] Action found in PrinterLog:`, targetLog);
-          if (targetLog.partsDeducted && targetLog.partsDeducted.length > 0) {
-            try {
-              const partsList = await this.getParts();
-              for (const pItem of targetLog.partsDeducted) {
-                const part = partsList.find(p => p.id === pItem.partId);
-                if (part) {
-                  const restoredQty = part.quantity + (pItem.quantity || 1);
-                  console.log(`[storage.ts:deleteDailyAction] Restocking part ${part.id}: newQty=${restoredQty}`);
-                  await this._update<Part>(STORAGE_KEYS.PARTS, part.id, { quantity: restoredQty });
+
+          const isCompoundId = actionId.startsWith(`${targetLog.id}_`);
+
+          if (isCompoundId && targetLog.partsDeducted && targetLog.partsDeducted.length > 0) {
+            const remainder = actionId.slice(targetLog.id.length + 1);
+            const lastUnderscore = remainder.lastIndexOf('_');
+            const targetPartId = lastUnderscore !== -1 ? remainder.slice(0, lastUnderscore) : remainder;
+            const rawIndex = lastUnderscore !== -1 ? parseInt(remainder.slice(lastUnderscore + 1), 10) : -1;
+
+            let targetIndex = -1;
+            if (
+              !isNaN(rawIndex) &&
+              rawIndex >= 0 &&
+              rawIndex < targetLog.partsDeducted.length &&
+              targetLog.partsDeducted[rawIndex].partId === targetPartId
+            ) {
+              targetIndex = rawIndex;
+            } else {
+              targetIndex = targetLog.partsDeducted.findIndex(p => p.partId === targetPartId);
+            }
+
+            if (targetIndex !== -1) {
+              const removedItem = targetLog.partsDeducted[targetIndex];
+              if (removedItem && removedItem.partId) {
+                try {
+                  const partsList = await this.getParts();
+                  const part = partsList.find(p => p.id === removedItem.partId);
+                  if (part) {
+                    const restoredQty = (part.quantity || 0) + (removedItem.quantity || 1);
+                    console.log(`[storage.ts:deleteDailyAction] Restocking targeted part ${part.id}: newQty=${restoredQty}`);
+                    await this._update<Part>(STORAGE_KEYS.PARTS, part.id, { quantity: restoredQty });
+                    part.quantity = restoredQty;
+                  }
+                } catch (restockErr) {
+                  console.warn('[storage.ts:deleteDailyAction] Error restocking targeted part:', restockErr);
                 }
               }
-            } catch (restockErr) {
-              console.warn('[storage.ts:deleteDailyAction] Error restocking parts from PrinterLog:', restockErr);
-            }
-          } else if (targetLog.partId && targetLog.quantityDeducted && targetLog.quantityDeducted > 0) {
-            try {
-              const partsList = await this.getParts();
-              const part = partsList.find(p => p.id === targetLog.partId);
-              if (part) {
-                const restoredQty = part.quantity + targetLog.quantityDeducted;
-                await this._update<Part>(STORAGE_KEYS.PARTS, part.id, { quantity: restoredQty });
+
+              targetLog.partsDeducted.splice(targetIndex, 1);
+
+              // Если в логе еще остаются другие детали — обновляем базовый лог в PRINTER_LOGS
+              if (targetLog.partsDeducted.length > 0) {
+                console.log(`[storage.ts:deleteDailyAction] Preserving PrinterLog ${targetLog.id} with ${targetLog.partsDeducted.length} remaining parts.`);
+                const logDocRef = doc(getWorkspaceCollectionRef(STORAGE_KEYS.PRINTER_LOGS), targetLog.id);
+                await updateDoc(logDocRef, sanitizeData({
+                  partsDeducted: targetLog.partsDeducted,
+                  partId: targetLog.partsDeducted.length === 1 ? targetLog.partsDeducted[0].partId : '',
+                  partName: targetLog.partsDeducted.length === 1 ? targetLog.partsDeducted[0].partName : '',
+                  quantityDeducted: targetLog.partsDeducted.length === 1 ? targetLog.partsDeducted[0].quantity : 0,
+                }) as any);
+                return true;
+              } else {
+                // Детали закончились. Проверяем, есть ли описание работ
+                const hasDescription = Boolean(
+                  targetLog.description &&
+                  targetLog.description.trim() &&
+                  targetLog.description.trim() !== 'Обслуживание'
+                );
+
+                if (hasDescription) {
+                  console.log(`[storage.ts:deleteDailyAction] Parts exhausted, but work description remains. Updating PrinterLog ${targetLog.id} to no write-off.`);
+                  const logDocRef = doc(getWorkspaceCollectionRef(STORAGE_KEYS.PRINTER_LOGS), targetLog.id);
+                  await updateDoc(logDocRef, sanitizeData({
+                    partsDeducted: [],
+                    partId: '',
+                    partName: 'без списания',
+                    quantityDeducted: 0,
+                  }) as any);
+                  return true;
+                }
               }
-            } catch (restockErr) {
-              console.warn('[storage.ts:deleteDailyAction] Error restocking part from PrinterLog:', restockErr);
+            }
+          } else {
+            // Удаление всего лога (не составной ID или одиночная запись)
+            if (targetLog.partsDeducted && targetLog.partsDeducted.length > 0) {
+              try {
+                const partsList = await this.getParts();
+                for (const pItem of targetLog.partsDeducted) {
+                  const part = partsList.find(p => p.id === pItem.partId);
+                  if (part) {
+                    const restoredQty = (part.quantity || 0) + (pItem.quantity || 1);
+                    console.log(`[storage.ts:deleteDailyAction] Restocking part ${part.id}: newQty=${restoredQty}`);
+                    await this._update<Part>(STORAGE_KEYS.PARTS, part.id, { quantity: restoredQty });
+                    part.quantity = restoredQty;
+                  }
+                }
+              } catch (restockErr) {
+                console.warn('[storage.ts:deleteDailyAction] Error restocking parts from PrinterLog:', restockErr);
+              }
+            } else if (targetLog.partId && targetLog.quantityDeducted && targetLog.quantityDeducted > 0) {
+              try {
+                const partsList = await this.getParts();
+                const part = partsList.find(p => p.id === targetLog.partId);
+                if (part) {
+                  const restoredQty = (part.quantity || 0) + targetLog.quantityDeducted;
+                  await this._update<Part>(STORAGE_KEYS.PARTS, part.id, { quantity: restoredQty });
+                  part.quantity = restoredQty;
+                }
+              } catch (restockErr) {
+                console.warn('[storage.ts:deleteDailyAction] Error restocking part from PrinterLog:', restockErr);
+              }
             }
           }
 
-          // Сброс статуса связанной задачи в false (через updateNote)
+          // Полное удаление лога: сброс статуса связанной задачи в false
           try {
             const notesList = await this.getNotes();
             const targetNote = notesList.find(n =>
